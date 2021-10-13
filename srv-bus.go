@@ -34,12 +34,16 @@ type Service struct {
 	results   []interface{}
 }
 
-type Server struct {
+func NewServiceServer() *ServiceServer {
+	return &ServiceServer{false, make(map[uuid.UUID]*Service)}
+}
+
+type ServiceServer struct {
 	started  bool
 	services map[uuid.UUID]*Service
 }
 
-func (srv *Server) AddTask(sf SrvFunc, p ...interface{}) (uuid.UUID, error) {
+func (srv *ServiceServer) AddTask(sf SrvFunc, p ...interface{}) (uuid.UUID, error) {
 	var uid uuid.UUID
 
 	if sf == nil {
@@ -54,37 +58,43 @@ func (srv *Server) AddTask(sf SrvFunc, p ...interface{}) (uuid.UUID, error) {
 	return uid, nil
 }
 
-func (srv *Server) Run(ctx context.Context) {
+func (srv *ServiceServer) Run(ctx context.Context) {
 	if srv.started {
 		return
 	}
+	log.Print("Service bus server started.")
 	sChan := make(chan srvState)
 	go func() {
-		select {
-		case s := <-sChan:
-			if s.err != nil {
-				srv.services[s.srvID].state = SSBroken
-				srv.services[s.srvID].lastError = s.err
+		for {
+			select {
+			case s := <-sChan:
+				if s.err != nil {
+					srv.services[s.srvID].state = SSBroken
+					srv.services[s.srvID].lastError = s.err
+				}
+			case <-ctx.Done():
+				return
 			}
-		case <-ctx.Done():
-			return
 		}
 	}()
 	go func() {
 		for {
 			select {
 			case <-time.After(1 * time.Second):
+				log.Print("Service queue processing started")
 				for _, s := range srv.services {
 					if s.state == SSFinished || s.state == SSBroken || s.state == SSStarted {
 						continue
 					}
 					if time.Now().Before(s.nextCheck) {
+						log.Printf("Time isn't come for service %v", s.id)
 						continue
 					}
 					go runService(ctx, s, sChan)
 				}
 			case <-ctx.Done():
 				srv.started = false
+				log.Print("Service bus server ended.")
 				return
 			}
 		}
@@ -105,14 +115,14 @@ func runService(ctx context.Context, srv *Service, state chan srvState) {
 	log.Printf("Service %v ended. Status: %v, Error: %v", srv.id, srv.state, err)
 }
 
-func (srv *Server) ListServices() {
+func (srv *ServiceServer) ListServices() {
 	fmt.Println("srv ID, state, nextCheck, lastError")
 	for _, s := range srv.services {
 		fmt.Println(s.id, s.state, s.nextCheck, s.lastError)
 	}
 }
 
-func (srv *Server) DelService(sid uuid.UUID) error {
+func (srv *ServiceServer) DelService(sid uuid.UUID) error {
 	if _, ok := srv.services[sid]; ok {
 		if srv.services[sid].state == SSStarted {
 			return fmt.Errorf("couldn't delete executing service %v", sid)
@@ -125,15 +135,15 @@ func (srv *Server) DelService(sid uuid.UUID) error {
 	return nil
 }
 
-func (srv *Server) GetStatus(sid uuid.UUID) (ServiceState, error, error) {
+func (srv *ServiceServer) GetStatus(sid uuid.UUID) (ServiceState, error, error) {
 	if _, ok := srv.services[sid]; ok {
 		return SSBroken, nil, fmt.Errorf("couldn't find service wtih id %v", sid)
 	}
 	return srv.services[sid].state, srv.services[sid].lastError, nil
 }
 
-func (srv *Server) GetResults(sid uuid.UUID) ([]interface{}, error) {
-	if _, ok := srv.services[sid]; ok {
+func (srv *ServiceServer) GetResults(sid uuid.UUID) ([]interface{}, error) {
+	if _, ok := srv.services[sid]; !ok {
 		return nil, fmt.Errorf("couldn't find service wtih id %v", sid)
 	}
 	if srv.services[sid].state != SSFinished {
@@ -143,7 +153,7 @@ func (srv *Server) GetResults(sid uuid.UUID) ([]interface{}, error) {
 	return srv.services[sid].results, nil
 }
 
-func MsgOutput(ctx context.Context, s *Service) error {
+func SrvMsgOutput(ctx context.Context, s *Service) error {
 	fmt.Println(s.params...)
 	s.state = SSFinished
 	return nil
