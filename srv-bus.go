@@ -142,18 +142,18 @@ func (srv *ServiceServer) GetStatus(sid uuid.UUID) (ServiceState, error, error) 
 	return srv.services[sid].state, srv.services[sid].lastError, nil
 }
 
-func (srv *ServiceServer) GetResults(sid uuid.UUID) ([]interface{}, error) {
+func (srv *ServiceServer) GetResults(sid uuid.UUID, whateverHave bool) ([]interface{}, error) {
 	if _, ok := srv.services[sid]; !ok {
 		return nil, fmt.Errorf("couldn't find service wtih id %v", sid)
 	}
-	if srv.services[sid].state != SSFinished {
+	if srv.services[sid].state != SSFinished && !whateverHave {
 		return nil, fmt.Errorf("service %v isn't finished (current state: %v)", sid, srv.services[sid].state)
 	}
 
 	return srv.services[sid].results, nil
 }
 
-func SrvMsgOutput(ctx context.Context, s *Service) error {
+func SrvOutput(ctx context.Context, s *Service) error {
 	fmt.Println(s.params...)
 	s.state = SSFinished
 	return nil

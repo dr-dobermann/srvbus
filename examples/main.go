@@ -11,12 +11,11 @@ import (
 
 func main() {
 	ms := srvbus.NewMessageServer()
-	ms.Add("hello", "world!")
-
 	srv := srvbus.NewServiceServer()
 
-	srv.AddTask(srvbus.SrvMsgOutput, "Hello,", "world!")
-	sid, err := srv.AddTask(srvbus.SrvGetMessage, ms, "hello", int64(1), 2)
+	srv.AddTask(srvbus.SrvOutput, "Hello,", "world!")
+	sid, err := srv.AddTask(srvbus.SrvGetMessages, srvbus.MsgServerDef{ms, "hello", 1, 2})
+	srv.AddTask(srvbus.SrvPutMessages, srvbus.MsgServerDef{ms, "hello", 1, 1}, "sweet", "dober")
 	if err != nil {
 		log.Fatal("couldn't add GetMessage service due to", err.Error())
 	}
@@ -25,10 +24,8 @@ func main() {
 	defer cancel()
 
 	srv.Run(ctx)
-	time.Sleep(5 * time.Second)
-	ms.Add("hello", "dober!")
-	time.Sleep(5 * time.Second)
-	results, err := srv.GetResults(sid)
+	time.Sleep(10 * time.Second)
+	results, err := srv.GetResults(sid, false)
 	if err != nil {
 		log.Fatal("couldn't get results of Get Message service ", err)
 	}
@@ -39,6 +36,4 @@ func main() {
 	}
 
 	srv.ListServices()
-
-	panic("stack as it is...")
 }
