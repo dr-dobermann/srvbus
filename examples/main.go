@@ -14,8 +14,8 @@ func main() {
 	srv := srvbus.NewServiceServer()
 
 	srv.AddTask(srvbus.SrvOutput, "Hello,", "world!")
-	sid, err := srv.AddTask(srvbus.SrvGetMessages, srvbus.MsgServerDef{ms, "hello", 1, 2})
-	srv.AddTask(srvbus.SrvPutMessages, srvbus.MsgServerDef{ms, "hello", 1, 1}, "sweet", "dober")
+	sid, err := srv.AddTask(srvbus.SrvGetMessages, srvbus.MsgServerDef{ms, "hello", 1}, int64(2))
+	srv.AddTask(srvbus.SrvPutMessages, srvbus.MsgServerDef{ms, "hello", 1}, "sweet", "dober")
 	if err != nil {
 		log.Fatal("couldn't add GetMessage service due to", err.Error())
 	}
