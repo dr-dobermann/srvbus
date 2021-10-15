@@ -16,6 +16,7 @@ type Message struct {
 
 func (m *Message) Read() (string, time.Time) {
 	m.readed = true
+
 	return m.msg, m.when
 }
 
@@ -30,12 +31,12 @@ type MessageServer struct {
 	minTimeout int64
 }
 
-type MessageServerErrorWrapper struct {
+type MessageServerError struct {
 	MSrv    *MessageServer
 	Message string
 }
 
-func (mew MessageServerErrorWrapper) Error() string {
+func (mew MessageServerError) Error() string {
 	if mew.MSrv == nil {
 		return mew.Message
 	}
@@ -44,7 +45,7 @@ func (mew MessageServerErrorWrapper) Error() string {
 }
 
 func NewMessageServerError(ms *MessageServer, msg string) error {
-	return MessageServerErrorWrapper{ms, msg}
+	return MessageServerError{ms, msg}
 }
 
 func (s MessageServer) GetNextTime() time.Time {
@@ -87,9 +88,7 @@ func (s *MessageServer) AddMessage(q string, m string) {
 // If readed is true, it returns also previously readed messages
 // If qShouldBe is true, then error returns if there is no queue named q,
 // else the empty messages slice will be returned
-func (s *MessageServer) GetMessages(q string, readed bool,
-	msgCount int64, qShouldBe bool) ([]Message, error) {
-
+func (s *MessageServer) GetMessages(q string, readed bool, msgCount int64, qShouldBe bool) ([]Message, error) {
 	mm := []Message{}
 
 	s.m.Lock()
@@ -107,8 +106,11 @@ func (s *MessageServer) GetMessages(q string, readed bool,
 		if m.readed && !readed {
 			continue
 		}
+
 		s.qq[q][i].readed = true
+
 		mm = append(mm, m)
+
 		if msgCount > 0 {
 			msgCount--
 			if msgCount == 0 {
@@ -128,13 +130,18 @@ type MsgServerDef struct {
 	Timeout int64
 }
 
+const (
+	getMsgParams = 2
+	putMsgParams = 2
+)
+
 // SrvGetMessage gets unread messages from message server.
 // It needs two parameters:
 //   - MsgServerDef as message server and queue definition
 //   - msgCounts(int64) as number of messages to read. If it's value -1
 //     then it would be read all the messages until server ends
 func SrvGetMessages(ctx context.Context, s *Service) error {
-	if len(s.params) < 2 {
+	if len(s.params) < getMsgParams {
 		return NewServiceError(s,
 			fmt.Sprintf("Too few parameter to start SrvGetMessages service %v out of 2",
 				len(s.params)))
@@ -160,13 +167,16 @@ func SrvGetMessages(ctx context.Context, s *Service) error {
 	}
 
 	log.Print("Got ", len(mm), " messages for service ", s.id)
+
 	for _, m := range mm {
 		s.m.Lock()
 		s.results = append(s.results, m)
 		s.m.Unlock()
+
 		if cntr < 0 {
 			continue
 		}
+
 		cntr--
 		if cntr == 0 {
 			s.SetState(SSFinished)
@@ -201,7 +211,7 @@ func SrvGetMessages(ctx context.Context, s *Service) error {
 //  - MsgServerDef as message server and queue definition
 //  - messages in every single parameter
 func SrvPutMessages(ctx context.Context, s *Service) error {
-	if len(s.params) < 2 {
+	if len(s.params) < putMsgParams {
 		return NewServiceError(s,
 			fmt.Sprintf("Too few parameter to start SrvPutMessages service %v out of 2",
 				len(s.params)))
@@ -225,6 +235,7 @@ func SrvPutMessages(ctx context.Context, s *Service) error {
 
 			continue
 		}
+
 		mr.MsgServer.AddMessage(mr.QueueName, msg)
 	}
 

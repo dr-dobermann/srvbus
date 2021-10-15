@@ -46,12 +46,12 @@ func (s *Service) SetState(ss ServiceState) {
 	s.m.Unlock()
 }
 
-type ServiceErrorWrapper struct {
+type ServiceError struct {
 	Srvc    *Service
 	Message string
 }
 
-func (err ServiceErrorWrapper) Error() string {
+func (err ServiceError) Error() string {
 	if err.Srvc == nil {
 		return err.Message
 	}
@@ -60,7 +60,7 @@ func (err ServiceErrorWrapper) Error() string {
 }
 
 func NewServiceError(s *Service, msg string) error {
-	return ServiceErrorWrapper{s, msg}
+	return ServiceError{s, msg}
 }
 
 type ServiceServer struct {
@@ -77,6 +77,7 @@ func (srv *ServiceServer) AddTask(sf SrvFunc, p ...interface{}) (uuid.UUID, erro
 
 	if sf == nil {
 		log.Printf("Attempting to create a service with an empty service function")
+
 		return uid, NewServiceError(nil, "couldn't add service with an empty service function")
 	}
 
@@ -95,9 +96,10 @@ func (srv *ServiceServer) Run(ctx context.Context) {
 
 	log.Print("Service bus server started.")
 
+	sChan := make(chan srvState)
+
 	// start service monitor to mark broken services
 	// if it returns non-nil error
-	sChan := make(chan srvState)
 	go func() {
 		for {
 			select {
@@ -119,6 +121,7 @@ func (srv *ServiceServer) Run(ctx context.Context) {
 			select {
 			case <-time.After(1 * time.Second):
 				log.Print("Service queue processing started")
+
 				for _, s := range srv.services {
 					if s.state == SSFinished || s.state == SSBroken || s.state == SSStarted {
 						continue
@@ -126,15 +129,20 @@ func (srv *ServiceServer) Run(ctx context.Context) {
 
 					if time.Now().Before(s.nextCheck) {
 						log.Printf("Time isn't come for service %v", s.id)
+
 						continue
 					}
 
 					go runService(ctx, s, sChan)
 				}
+
 				log.Print("Service queue processing ended")
+
 			case <-ctx.Done():
 				srv.started = false
+
 				log.Print("Service bus server ended.")
+
 				return
 			}
 		}
