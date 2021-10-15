@@ -24,17 +24,35 @@ func (m *Message) String() string {
 }
 
 type MessageServer struct {
+	name       string
 	m          *sync.Mutex // TODO: consider to create mutexes for every single queue
 	qq         map[string][]Message
 	minTimeout int64
+}
+
+type MessageServerErrorWrapper struct {
+	MSrv    *MessageServer
+	Message string
+}
+
+func (mew MessageServerErrorWrapper) Error() string {
+	if mew.MSrv == nil {
+		return mew.Message
+	}
+
+	return fmt.Sprintf("[%s]: %s", mew.MSrv.name, mew.Message)
+}
+
+func NewMessageServerError(ms *MessageServer, msg string) error {
+	return MessageServerErrorWrapper{ms, msg}
 }
 
 func (s MessageServer) GetNextTime() time.Time {
 	return time.Now().Add(time.Duration(s.minTimeout * int64(time.Second)))
 }
 
-func NewMessageServer() *MessageServer {
-	return &MessageServer{new(sync.Mutex), make(map[string][]Message), 1}
+func NewMessageServer(n string) *MessageServer {
+	return &MessageServer{n, new(sync.Mutex), make(map[string][]Message), 1}
 }
 
 func (s MessageServer) ListQueues() []string {
@@ -60,6 +78,7 @@ func (s *MessageServer) AddMessage(q string, m string) {
 		msg:    m,
 		readed: false,
 	})
+
 	s.m.Unlock()
 }
 
@@ -78,7 +97,7 @@ func (s *MessageServer) GetMessages(q string, readed bool,
 
 	if _, ok := s.qq[q]; !ok {
 		if qShouldBe {
-			return nil, fmt.Errorf("queue %v couldn't be found on the message server", q)
+			return nil, NewMessageServerError(s, fmt.Sprintf("Queue \"%v\" is not found", q))
 		}
 
 		return mm, nil
@@ -116,8 +135,9 @@ type MsgServerDef struct {
 //     then it would be read all the messages until server ends
 func SrvGetMessages(ctx context.Context, s *Service) error {
 	if len(s.params) < 2 {
-		return fmt.Errorf("too few parameter to start SrvGetMessages service %v out of 2 for %v service",
-			len(s.params), s.id)
+		return NewServiceError(s,
+			fmt.Sprintf("Too few parameter to start SrvGetMessages service %v out of 2",
+				len(s.params)))
 	}
 
 	var (
@@ -127,11 +147,11 @@ func SrvGetMessages(ctx context.Context, s *Service) error {
 	)
 
 	if mr, ok = s.params[0].(MsgServerDef); !ok {
-		return fmt.Errorf("could't get message server definition for %v service", s.id)
+		return NewServiceError(s, "Could't get message server definition")
 	}
 
 	if cntr, ok = s.params[1].(int64); !ok {
-		return fmt.Errorf("could't get message counter for %v service", s.id)
+		return NewServiceError(s, "Could't get message counter")
 	}
 
 	mm, err := mr.MsgServer.GetMessages(mr.QueueName, false, cntr, false)
@@ -182,7 +202,9 @@ func SrvGetMessages(ctx context.Context, s *Service) error {
 //  - messages in every single parameter
 func SrvPutMessages(ctx context.Context, s *Service) error {
 	if len(s.params) < 2 {
-		return fmt.Errorf("not enough parameters to add message to the server for %v service", s.id)
+		return NewServiceError(s,
+			fmt.Sprintf("Too few parameter to start SrvPutMessages service %v out of 2",
+				len(s.params)))
 	}
 
 	var (
@@ -191,7 +213,7 @@ func SrvPutMessages(ctx context.Context, s *Service) error {
 	)
 
 	if mr, ok = s.params[0].(MsgServerDef); !ok {
-		return fmt.Errorf("could't get message server definition for %v service", s.id)
+		return NewServiceError(s, "Could't get message server definition")
 	}
 
 	for i, m := range s.params[1:] {

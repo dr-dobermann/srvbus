@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	ms := srvbus.NewMessageServer()
+	ms := srvbus.NewMessageServer("my_test_server")
 	srv := srvbus.NewServiceServer()
 
 	srv.AddTask(srvbus.SrvOutput, "Hello,", "world!")
