@@ -10,4 +10,4 @@ Privides followed services:
 
 Also consists in-memory message server to support SrvPutMessages and SrvGetMessages.
 
-When one needs to use message-oriented services one should start MessageServer _manually_ via call _NewMessageServer_.
+To use message-oriented services MessageServer should be started _manually_ via call _NewMessageServer_.
