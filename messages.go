@@ -141,24 +141,22 @@ const (
 //   - msgCounts(int64) as number of messages to read. If it's value -1
 //     then it would be read all the messages until server ends
 func SrvGetMessages(ctx context.Context, s *Service) error {
-	if len(s.params) < getMsgParams {
-		return NewServiceError(s,
-			fmt.Sprintf("Too few parameter to start SrvGetMessages service %v out of 2",
-				len(s.params)))
-	}
-
 	var (
 		mr   MsgServerDef
 		cntr int64
 		ok   bool
 	)
+	
+	switch {
+	case len(s.params) < getMsgParams:
+	    return NewServiceError(s,
+			fmt.Sprintf("Too few parameter to start SrvGetMessages service %v out of 2",
+				len(s.params)))
+	case mr, ok = s.params[0].(MsgServerDef); !ok:
+	    return NewServiceError(s, "Could't get message server definition")
 
-	if mr, ok = s.params[0].(MsgServerDef); !ok {
-		return NewServiceError(s, "Could't get message server definition")
-	}
-
-	if cntr, ok = s.params[1].(int64); !ok {
-		return NewServiceError(s, "Could't get message counter")
+	case cntr, ok = s.params[1].(int64); !ok:
+	    return NewServiceError(s, "Could't get message counter")
 	}
 
 	mm, err := mr.MsgServer.GetMessages(mr.QueueName, false, cntr, false)
