@@ -146,16 +146,18 @@ func SrvGetMessages(ctx context.Context, s *Service) error {
 		cntr int64
 		ok   bool
 	)
-	
-	switch {
-	case len(s.params) < getMsgParams:
+
+	if len(s.params) < getMsgParams {
 	    return NewServiceError(s,
 			fmt.Sprintf("Too few parameter to start SrvGetMessages service %v out of 2",
 				len(s.params)))
-	case mr, ok = s.params[0].(MsgServerDef); !ok:
-	    return NewServiceError(s, "Could't get message server definition")
+	}
 
-	case cntr, ok = s.params[1].(int64); !ok:
+	if mr, ok = s.params[0].(MsgServerDef); !ok {
+	    return NewServiceError(s, "Could't get message server definition")
+	}
+
+	if cntr, ok = s.params[1].(int64); !ok {
 	    return NewServiceError(s, "Could't get message counter")
 	}
 

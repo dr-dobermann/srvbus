@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	srvbus "github.com/dr-dobermann/go-srv-bus"
+	"github.com/dr-dobermann/srvbus"
 )
 
 func main() {

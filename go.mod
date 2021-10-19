@@ -1,4 +1,4 @@
-module github.com/dr-dobermann/go-srv-bus
+module github.com/dr-dobermann/srvbus
 
 go 1.16
 
