@@ -1,6 +1,6 @@
-# go-srv-bus
+# srvbus
 
-In-memory Service Bus for executing services by demand, and getting the results of their execution.
+Golang in-memory Service Bus for executing services by demand, and getting the results of their execution.
 
 Provides followed services:
 
