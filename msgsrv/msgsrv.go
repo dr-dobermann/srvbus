@@ -2,6 +2,8 @@ package msgsrv
 
 import (
 	"fmt"
+	"io"
+	"io/ioutil"
 	"sync"
 	"time"
 )
@@ -41,20 +43,28 @@ type Message struct {
 // NewMsg creates an Message with Key key and Data data and returns the pointer
 // to it.
 // if the data is more than 8k, then error will be returned.
-func NewMsg(key string, data []byte) (*Message, error) {
-	if len(data) > 8*(2<<10) {
+func NewMsg(key string, r io.Reader) (*Message, error) {
+
+	b, err := ioutil.ReadAll(r)
+	if err != nil && err != io.EOF {
+		return nil, NewMessageServerError(nil,
+			"couldn't read data for meddage "+key,
+			err)
+	}
+
+	if len(b) > 8*(2<<10) {
 		return nil,
 			NewMessageServerError(nil,
-				fmt.Sprintf("message %s is too large :%d ", key, len(data)),
+				fmt.Sprintf("message %s is too large :%d ", key, len(b)),
 				nil)
 	}
 
-	return &Message{Key: key, Data: append([]byte{}, data...)}, nil
+	return &Message{Key: key, Data: b}, nil
 }
 
 // GetMsg returns a Message or rise panic on error.
-func GetMsg(key string, data []byte) *Message {
-	m, err := NewMsg(key, data)
+func GetMsg(key string, r io.Reader) *Message {
+	m, err := NewMsg(key, r)
 	if err != nil {
 		panic(err.Error())
 	}

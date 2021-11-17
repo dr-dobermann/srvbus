@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/matryer/is"
@@ -46,15 +45,18 @@ func TestServiceServer(t *testing.T) {
 		t.Fatal("Nil Service added")
 	}
 
-	is.NoErr(srv.AddService(GetOutputService("Output Service", os.Stdout, "Hello world!\n", "Hello Dober!\n")))
+	var buf bytes.Buffer
+
+	is.NoErr(srv.AddService(GetOutputService("Output Service", &buf, "Hello world! ", "Hello Dober! ")))
 	if len(srv.services) != 1 {
 		t.Error("Invalid services count", len(srv.services))
 	}
 
-	is.NoErr(srv.AddService(GetOutputService("Output Service 2", os.Stdout, "Hello again Dober!\n")))
+	is.NoErr(srv.AddService(GetOutputService("Output Service 2", &buf, "Hello again Dober!")))
 
 	srv.Start(ctx)
 	is.Equal(srv.state, SrvExecutingServices)
+	is.Equal(buf.String(), "Hello world! Hello Dober! Hello again Dober!")
 
 	stat := srv.Stats()
 

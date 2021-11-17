@@ -164,26 +164,7 @@ func (ss *ServiceServer) Start(ctx context.Context) {
 				timeout = time.Duration(0)
 
 			case <-time.After(timeout * time.Second):
-				ss.Lock()
-				sc := 0
-				for _, s := range ss.services {
-					if s.State() != SSReady {
-						continue
-					}
 
-					go func() {
-						s.Run(ctx)
-					}()
-
-					sc++
-				}
-				ss.Unlock()
-
-				// if there were no ready Services on the server
-				// idle timeout sets to 10 seconds
-				if sc == 0 {
-					timeout = time.Duration(10 * time.Second)
-				}
 			}
 		}
 	}(ctx)

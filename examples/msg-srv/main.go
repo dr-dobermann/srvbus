@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dr-dobermann/srvbus/msgsrv"
@@ -41,7 +42,7 @@ func main() {
 		1*time.Second,
 		func() {
 			fmt.Println("Putting message")
-			ms.PutMessages(qn, *msgsrv.GetMsg("greetings", []byte("Hello Dober!")))
+			ms.PutMessages(qn, *msgsrv.GetMsg("greetings", strings.NewReader("Hello Dober!")))
 		})
 
 	fmt.Println("Closing...")
