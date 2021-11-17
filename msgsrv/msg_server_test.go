@@ -19,7 +19,7 @@ func TestMessageServer(t *testing.T) {
 	}
 
 	// check putting message into non-named queue
-	if err := ms.PutMessages("", *MustMsg(tm.Key, tm.Data)); err == nil {
+	if err := ms.PutMessages("", *GetMsg(tm.Key, tm.Data)); err == nil {
 		t.Fatal("Adding message into empty queue")
 	}
 

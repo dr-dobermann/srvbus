@@ -1,48 +1,50 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
 
-	"github.com/dr-dobermann/srvbus"
-	"github.com/google/uuid"
+	"github.com/dr-dobermann/srvbus/msgsrv"
 )
 
 func main() {
-	ms := srvbus.NewMessageServer("my_test_server")
-	srv := srvbus.NewServiceServer()
+	ms := msgsrv.NewMessageServer("myserver")
+	if ms == nil {
+		panic("couldn't create a message server")
+	}
 
-	printRes(srv.AddTask(srvbus.SrvOutput, "Hello,", "world!"))
-	printRes(srv.AddTask(srvbus.SrvGetMessages, srvbus.MsgServerDef{ms, "hello", 1}, int64(2)))
-	printRes(srv.AddTask(srvbus.SrvPutMessages, srvbus.MsgServerDef{ms, "hello", 1}, "sweet", "dober"))
+	qn := "msg_queue"
+	// trying to retrieve message
+	go func() {
+		for {
+			if ms.HasQueue(qn) {
+				break
+			}
+			fmt.Println("no queue", qn, "on server", ms.Name, ". Wait...")
+			time.Sleep(100 * time.Millisecond)
+		}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	srv.Run(ctx)
-	time.Sleep(10 * time.Second)
-
-	for _, si := range srv.ListServices() {
-
-		results, err := srv.GetResults(si.Id, false)
+		mm, err := ms.GetMesages(qn)
 		if err != nil {
-			fmt.Printf("couldn't get results for task %s : %v", si.Id, err)
-			continue
+			panic(fmt.Sprintf("couldn't retrieve messages "+
+				"from queue %s on server %s : %v",
+				qn, ms.Name, err))
 		}
-
-		for _, m := range results {
-			ms := m.(srvbus.Message)
-			fmt.Printf("%v\n", ms.String())
+		for _, m := range mm {
+			fmt.Printf("Got message :\n  registered at: %v\n"+
+				"  key: %s\n  value: %v (%s)\n", m.RegTime, m.Key, m.Data, string(m.Data))
 		}
-	}
-}
+	}()
 
-func printRes(id uuid.UUID, err error) {
-	if err == nil {
-		fmt.Println("Task", id, "successfully added")
-		return
-	}
+	// write message to server
+	time.AfterFunc(
+		1*time.Second,
+		func() {
+			fmt.Println("Putting message")
+			ms.PutMessages(qn, *msgsrv.GetMsg("greetings", []byte("Hello Dober!")))
+		})
 
-	fmt.Printf("Adding task %v caused error %v", id, err)
+	fmt.Println("Closing...")
+
+	time.Sleep(2 * time.Second)
 }

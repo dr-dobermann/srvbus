@@ -15,7 +15,7 @@ type MessageServerError struct {
 func (mse MessageServerError) Error() string {
 	em := ""
 	if mse.ms != nil {
-		em += "[" + mse.ms.name + "] "
+		em += "[" + mse.ms.Name + "] "
 	}
 
 	em += em + mse.msg
@@ -38,10 +38,10 @@ type Message struct {
 	Data    []byte
 }
 
-// Msg creates an Message with Key key and Data data and returns the pointer
+// NewMsg creates an Message with Key key and Data data and returns the pointer
 // to it.
 // if the data is more than 8k, then error will be returned.
-func Msg(key string, data []byte) (*Message, error) {
+func NewMsg(key string, data []byte) (*Message, error) {
 	if len(data) > 8*(2<<10) {
 		return nil,
 			NewMessageServerError(nil,
@@ -52,8 +52,9 @@ func Msg(key string, data []byte) (*Message, error) {
 	return &Message{Key: key, Data: append([]byte{}, data...)}, nil
 }
 
-func MustMsg(key string, data []byte) *Message {
-	m, err := Msg(key, data)
+// GetMsg returns a Message or rise panic on error.
+func GetMsg(key string, data []byte) *Message {
+	m, err := NewMsg(key, data)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -69,7 +70,7 @@ type MQueue struct {
 }
 
 type MessageServer struct {
-	name   string
+	Name   string
 	queues map[string]*MQueue
 }
 
@@ -83,7 +84,7 @@ func NewMessageServer(name string) *MessageServer {
 	}
 
 	ms := new(MessageServer)
-	ms.name = name
+	ms.Name = name
 	ms.queues = make(map[string]*MQueue)
 
 	return ms
