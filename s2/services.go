@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/dr-dobermann/srvbus/msgsrv"
 	"github.com/google/uuid"
 )
 
@@ -79,21 +80,62 @@ func (os *OutputSvc) Run(_ context.Context) error {
 
 // ----------------------------------------------------------------------------
 
-// type MsgPutSvc struct {
-// 	svcBase
+type PutMsgSvc struct {
+	svcBase
 
-// 	ms *msgsrv.MessageServer
-// 	mm []*msgsrv.Message
-// }
+	ms    *msgsrv.MessageServer
+	qname string
+	mm    []*msgsrv.Message
+}
 
-// func NewPutMessageSvc(
-// 	sname string,
-// 	ms *msgsrv.MessageServer,
-// 	mm ...msgsrv.Message) (Service, error) {
+var ErrPmsInvalidMsgSrv = errors.New("invalid message server pointer")
 
-// 	pms := new(MsgPutSvc)
+var ErrPmsInvalidQueue = errors.New("invalid queue name")
 
-// 	return pms, nil
-// }
+var ErrPmsNoMessages = errors.New("no messages to put in")
+
+// NewPutMessageSvc creates a new Put Message servcie to put messages mm on
+// message server ms in the queue qname.
+func NewPutMessageSvc(
+	sname string,
+	ms *msgsrv.MessageServer,
+	qname string,
+	mm ...*msgsrv.Message) (Service, error) {
+
+	if sname == "" {
+		sname = "PutMessage Service"
+	}
+
+	if ms == nil {
+		return nil, ErrPmsInvalidMsgSrv
+	}
+
+	if qname == "" {
+		return nil, ErrPmsInvalidQueue
+	}
+
+	if len(mm) == 0 {
+		return nil, ErrPmsNoMessages
+	}
+
+	pms := new(PutMsgSvc)
+	pms.id = uuid.New()
+	pms.Name = sname
+	pms.qname = qname
+	pms.ms = ms
+	pms.mm = append(pms.mm, mm...)
+
+	return pms, nil
+}
+
+func (pms *PutMsgSvc) Run(_ context.Context) error {
+
+	mm := make([]msgsrv.Message, 0)
+	for _, m := range pms.mm {
+		mm = append(mm, *m)
+	}
+
+	return pms.ms.PutMessages(pms.qname, mm...)
+}
 
 // ----------------------------------------------------------------------------

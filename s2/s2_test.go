@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dr-dobermann/srvbus/msgsrv"
 	"github.com/matryer/is"
 )
 
@@ -70,12 +71,29 @@ func TestServiceServer(t *testing.T) {
 
 }
 
-// func TestMessageServices(t *testing.T) {
+func TestMessageServices(t *testing.T) {
+	is := is.New(t)
 
-// 	ctx, cancelCtx := context.WithCancel(context.Background())
-// 	defer cancelCtx()
+	ms := msgsrv.NewMessageServer("test_message_server")
+	qm := "test_queue"
+	m := []struct{ k, v string }{
+		{k: "test_msg", v: "Hello Dober!"},
+	}
 
-// 	ms := msgsrv.NewMessageServer("test_message_server")
+	pms, err := NewPutMessageSvc(
+		"PutMsg Service",
+		ms,
+		qm,
+		msgsrv.GetMsg(m[0].k, bytes.NewBufferString(m[0].v)))
 
-// 	pms, err := NewPutMessageSvc("PutMsg Service", ms, *msgsrv.GetMsg("test_msg"), )
-// }
+	is.NoErr(err)
+
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+
+	srv := NewServiceServer("test_service_server", ctx)
+
+	is.NoErr(srv.AddService(pms))
+
+	is.NoErr(srv.Start(ctx))
+}
