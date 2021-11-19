@@ -74,12 +74,15 @@ func GetMsg(key string, r io.Reader) *Message {
 
 type MQueue struct {
 	sync.Mutex
+
 	name       string
 	messages   []*Message
 	lastReaded int
 }
 
 type MessageServer struct {
+	sync.Mutex
+
 	Name   string
 	queues map[string]*MQueue
 }
@@ -108,6 +111,7 @@ func (ms *MessageServer) PutMessages(qname string, msg ...Message) error {
 		return NewMessageServerError(ms, "queue name is empty", nil)
 	}
 
+	ms.Lock()
 	q, ok := ms.queues[qname]
 	if !ok {
 		ms.queues[qname] = &MQueue{
@@ -117,6 +121,7 @@ func (ms *MessageServer) PutMessages(qname string, msg ...Message) error {
 
 		q = ms.queues[qname]
 	}
+	ms.Unlock()
 
 	for _, m := range msg {
 		q.Lock()
@@ -128,7 +133,10 @@ func (ms *MessageServer) PutMessages(qname string, msg ...Message) error {
 }
 
 func checkQueue(ms *MessageServer, qname string) (*MQueue, error) {
+	ms.Lock()
 	q, ok := ms.queues[qname]
+	ms.Unlock()
+
 	if !ok {
 		return nil,
 			NewMessageServerError(ms,
@@ -175,7 +183,9 @@ func (ms *MessageServer) ResetQueue(qname string) error {
 
 // HasQueue checks presence of queue qname on the MessageServer ms.
 func (ms *MessageServer) HasQueue(qname string) bool {
+	ms.Lock()
 	_, ok := ms.queues[qname]
+	ms.Unlock()
 
 	return ok
 }

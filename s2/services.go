@@ -231,11 +231,26 @@ func NewGetMessagesSvc(
 	gms := new(GetMgSvc)
 	gms.id = uuid.New()
 	gms.Name = name
+	gms.ms = ms
 	gms.qname = qname
 	gms.timeout = timeout
 	gms.attempts = attempts
 	gms.maxMsgNum = maxMsgNum
 	gms.mm = make([]*msgsrv.Message, 0)
+	gms.resultsProvider =
+		func() chan interface{} {
+			res := make(chan interface{})
+
+			go func() {
+				for _, m := range gms.mm {
+					res <- *m
+				}
+
+				close(res)
+			}()
+
+			return res
+		}
 
 	return gms, nil
 }
@@ -265,7 +280,7 @@ func (gms *GetMgSvc) Run(ctx context.Context) error {
 
 		mm, err := gms.ms.GetMesages(gms.qname)
 		if err != nil {
-			return nil
+			return err
 		}
 
 		for _, m := range mm {

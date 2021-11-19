@@ -95,7 +95,29 @@ func TestMessageServices(t *testing.T) {
 
 	is.NoErr(srv.AddService(pms))
 
-	is.NoErr(srv.AddService(GetGetMessagesSvc("Get Messages Service", ms, qn, 2, 1, 0)))
+	gms := GetGetMessagesSvc("Get Messages Service", ms, qn, 2, 1, 0)
+	is.NoErr(srv.AddService(gms))
 
 	is.NoErr(srv.Start(ctx))
+
+	msgPrinter := func(res chan interface{}) error {
+		fmt.Println("Printing gathered messages:")
+		for mc := range res {
+			m, ok := mc.(msgsrv.Message)
+			if !ok {
+				t.Error("Couldn't get a message from", mc)
+			}
+			fmt.Println(m.Key, " = ", string(m.Data))
+		}
+
+		return nil
+	}
+
+	is.NoErr(gms.UploadResults(ctx, msgPrinter))
+
+	fmt.Println("Waiting for results for 5 seconds...")
+
+	time.Sleep(5 * time.Second)
+
+	fmt.Println(srv.Stats())
 }

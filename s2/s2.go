@@ -2,12 +2,24 @@ package s2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+var ErrNoResultProvidr = errors.New("resultsProvider isn't set for the Service")
+
+var ErrInvalidSvcState = errors.New("couldn't get results from failed service")
+
+// Uploader is a functor user should provide to upload results
+// from the Service.
+//
+// Uploader will run by the Service and results will provide over
+// the channel results.
+type Uploader func(results chan interface{}) error
 
 // Service is an interface that every Service in s2 should implement.
 type Service interface {
@@ -27,6 +39,8 @@ type Service interface {
 
 	// UpdateTimer updates nextCheck if applicable.
 	UpdateTimer() time.Time
+
+	UploadResults(ctx context.Context, uploader Uploader) error
 }
 
 type ServiceState uint8
@@ -55,12 +69,17 @@ type srvState struct {
 // svcBase consists all the common Service information
 type svcBase struct {
 	sync.Mutex
+
 	id        uuid.UUID
 	Name      string
 	state     ServiceState
 	timeout   time.Duration
 	LastError error
 	nextCheck time.Time
+
+	// resultsProvider ia s function with returns a channel of
+	// the Service results
+	resultsProvider func() chan interface{}
 }
 
 func (sb *svcBase) Id() uuid.UUID {
@@ -76,6 +95,48 @@ func (sb *svcBase) UpdateTimer() time.Time {
 	}
 
 	return sb.nextCheck
+}
+
+// UploadResults runs an
+func (sb *svcBase) UploadResults(ctx context.Context, uploader Uploader) error {
+
+	if sb.resultsProvider == nil {
+		return ErrNoResultProvidr
+	}
+
+	ready := make(chan bool)
+	defer close(ready)
+
+	// wait for Service readiness
+	go func(ctx context.Context) {
+		for {
+			sb.Lock()
+			st := sb.state
+			sb.Unlock()
+			switch st {
+			case SSRunned:
+				time.Sleep(10 * time.Millisecond)
+				continue
+
+			case SSFailed:
+				ready <- false
+				return
+
+			case SSFinished:
+				ready <- true
+				return
+			}
+		}
+	}(ctx)
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+
+	case <-ready:
+	}
+
+	return uploader(sb.resultsProvider())
 }
 
 // State returns the state of the Service
