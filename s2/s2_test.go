@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/matryer/is"
 )
@@ -13,12 +15,12 @@ func TestOutputService(t *testing.T) {
 	is := is.New(t)
 
 	// check nil Writer
-	if _, err := NewOutputService("Nil Writer", nil, "test"); err == nil {
+	if _, err := NewOutputSvc("Nil Writer", nil, "test"); err == nil {
 		t.Fatal("Nil Writer accepted")
 	}
 
 	var buf bytes.Buffer
-	oss, err := NewOutputService("Output Service", &buf, "Hello world!", " ", "Hello Dober!")
+	oss, err := NewOutputSvc("Output Service", &buf, "Hello world!", " ", "Hello Dober!")
 	is.NoErr(err)
 	if oss == nil {
 		t.Error("Couldn't create Output Service")
@@ -47,18 +49,33 @@ func TestServiceServer(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	is.NoErr(srv.AddService(GetOutputService("Output Service", &buf, "Hello world! ", "Hello Dober! ")))
+	is.NoErr(srv.AddService(GetOutputSvc("Output Service", &buf, "Hello world! ", "Hello Dober!")))
 	if len(srv.services) != 1 {
 		t.Error("Invalid services count", len(srv.services))
 	}
 
-	is.NoErr(srv.AddService(GetOutputService("Output Service 2", &buf, "Hello again Dober!")))
+	//buf1 := bytes.NewBuffer(nil)
+	is.NoErr(srv.AddService(GetOutputSvc("Output Service 2", os.Stderr, "Hello again Dober!\n")))
 
 	srv.Start(ctx)
-	is.Equal(srv.state, SrvExecutingServices)
-	is.Equal(buf.String(), "Hello world! Hello Dober! Hello again Dober!")
+
+	fmt.Println("Pause for 3 seconds...")
+	time.Sleep(3 * time.Second)
 
 	stat := srv.Stats()
-
 	fmt.Println(stat)
+
+	is.Equal(srv.state, SrvExecutingServices)
+	is.Equal(buf.String(), "Hello world! Hello Dober!")
+
 }
+
+// func TestMessageServices(t *testing.T) {
+
+// 	ctx, cancelCtx := context.WithCancel(context.Background())
+// 	defer cancelCtx()
+
+// 	ms := msgsrv.NewMessageServer("test_message_server")
+
+// 	pms, err := NewPutMessageSvc("PutMsg Service", ms, *msgsrv.GetMsg("test_msg"), )
+// }
