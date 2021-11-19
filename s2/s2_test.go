@@ -75,15 +75,15 @@ func TestMessageServices(t *testing.T) {
 	is := is.New(t)
 
 	ms := msgsrv.NewMessageServer("test_message_server")
-	qm := "test_queue"
+	qn := "test_queue"
 	m := []struct{ k, v string }{
 		{k: "test_msg", v: "Hello Dober!"},
 	}
 
-	pms, err := NewPutMessageSvc(
+	pms, err := NewPutMessagesSvc(
 		"PutMsg Service",
 		ms,
-		qm,
+		qn,
 		msgsrv.GetMsg(m[0].k, bytes.NewBufferString(m[0].v)))
 
 	is.NoErr(err)
@@ -94,6 +94,8 @@ func TestMessageServices(t *testing.T) {
 	srv := NewServiceServer("test_service_server", ctx)
 
 	is.NoErr(srv.AddService(pms))
+
+	is.NoErr(srv.AddService(GetGetMessagesSvc("Get Messages Service", ms, qn, 2, 1, 0)))
 
 	is.NoErr(srv.Start(ctx))
 }

@@ -34,7 +34,6 @@ type ServiceState uint8
 const (
 	SSReady ServiceState = iota
 	SSRunned
-	SSAwaitsResponse
 	SSFinished
 	SSFailed
 )
@@ -43,7 +42,6 @@ func (ss ServiceState) String() string {
 	return []string{
 		"Service Ready to run",
 		"Service is Runned",
-		"Service Awaits Results",
 		"Service is Finished",
 		"Service is Failed",
 	}[ss]
@@ -293,9 +291,6 @@ func (ss *ServiceServer) Stats() ServerStatistics {
 		case SSRunned:
 			stat.Runned++
 
-		case SSAwaitsResponse:
-			stat.ResultsAwaits++
-
 		case SSFinished:
 			stat.Ended++
 
@@ -309,13 +304,12 @@ func (ss *ServiceServer) Stats() ServerStatistics {
 
 // ServerStatistics represents status information.
 type ServerStatistics struct {
-	SrvName       string
-	State         ServerState
-	Registered    int
-	ResultsAwaits int
-	Runned        int
-	Ended         int
-	Failed        int
+	SrvName    string
+	State      ServerState
+	Registered int
+	Runned     int
+	Ended      int
+	Failed     int
 }
 
 func (ss ServerStatistics) String() string {
@@ -325,11 +319,10 @@ func (ss ServerStatistics) String() string {
 			"  State : %s\n"+
 			"  Registered Services    : %d\n"+
 			"  Runned Services        : %d\n"+
-			"  Results Awaits Services: %d\n"+
 			"  Ended Services         : %d\n"+
 			"  Failed Services        : %d\n",
 		ss.SrvName, ss.State.String(),
-		ss.Registered, ss.Runned, ss.ResultsAwaits,
+		ss.Registered, ss.Runned,
 		ss.Ended, ss.Failed)
 }
 
