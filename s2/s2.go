@@ -19,7 +19,7 @@ var ErrInvalidSvcState = errors.New("couldn't get results from failed service")
 //
 // Uploader will run by the Service and results will provide over
 // the channel results.
-type Uploader func(results chan interface{}) error
+type Uploader func(results <-chan interface{}) error
 
 // Service is an interface that every Service in s2 should implement.
 type Service interface {
@@ -110,6 +110,12 @@ func (sb *svcBase) UploadResults(ctx context.Context, uploader Uploader) error {
 	// wait for Service readiness
 	go func(ctx context.Context) {
 		for {
+			select {
+			case <-ctx.Done():
+				ready <- false
+			default:
+			}
+
 			sb.Lock()
 			st := sb.state
 			sb.Unlock()
@@ -133,7 +139,10 @@ func (sb *svcBase) UploadResults(ctx context.Context, uploader Uploader) error {
 	case <-ctx.Done():
 		return ctx.Err()
 
-	case <-ready:
+	case rdy := <-ready:
+		if !rdy {
+			return ErrInvalidSvcState
+		}
 	}
 
 	return uploader(sb.resultsProvider())
@@ -320,12 +329,12 @@ func (ss *ServiceServer) Start(ctx context.Context) error {
 
 			case <-time.After(1 * time.Second):
 				for _, s := range ss.services {
-					svc := s
-					if svc.State() == SSReady {
-						svc.SetState(SSRunned, nil)
+					s := s
+					if s.State() == SSReady {
+						s.SetState(SSRunned, nil)
 						go func() {
-							err := svc.Run(ctx)
-							sChan <- srvState{svc.Id(), err}
+							err := s.Run(ctx)
+							sChan <- srvState{s.Id(), err}
 						}()
 					}
 				}
@@ -361,6 +370,11 @@ func (ss *ServiceServer) Stats() ServerStatistics {
 	}
 
 	return *stat
+}
+
+func (ss *ServiceServer) CanStop() bool {
+
+	return ss.Stats().Runned == 0
 }
 
 // ServerStatistics represents status information.

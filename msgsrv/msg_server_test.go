@@ -16,12 +16,12 @@ func TestMessageServer(t *testing.T) {
 	qn := "test_queue"
 	tm_str := "test_message"
 	tm_key, tm_r := "key", strings.NewReader(tm_str)
-	if err := ms.PutMessages(qn, *GetMsg(tm_key, tm_r)); err != nil {
+	if err := ms.PutMessages(qn, *MustGetMsg(tm_key, tm_r)); err != nil {
 		t.Fatal("Couldn't put message to Server", err.Error())
 	}
 
 	// check putting message into non-named queue
-	if err := ms.PutMessages("", *GetMsg(tm_key, tm_r)); err == nil {
+	if err := ms.PutMessages("", *MustGetMsg(tm_key, tm_r)); err == nil {
 		t.Fatal("Adding message into empty queue")
 	}
 
@@ -42,8 +42,8 @@ func TestMessageServer(t *testing.T) {
 		if len(mm) != 1 {
 			t.Fatal("Invalid message number :", len(mm))
 		}
-		if string(mm[0].Data) != tm_str {
-			t.Fatal("Data error! Expected", string(tm_str), ", got", string(mm[0].Data))
+		if string(mm[0].Data()) != tm_str {
+			t.Fatal("Data error! Expected", string(tm_str), ", got", string(mm[0].Data()))
 		}
 	}
 

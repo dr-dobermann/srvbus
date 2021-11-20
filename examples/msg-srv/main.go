@@ -32,8 +32,9 @@ func main() {
 				qn, ms.Name, err))
 		}
 		for _, m := range mm {
+			dat := m.Data()
 			fmt.Printf("Got message :\n  registered at: %v\n"+
-				"  key: %s\n  value: %v (%s)\n", m.RegTime, m.Key, m.Data, string(m.Data))
+				"  key: %s\n  value: %v (%s)\n", m.RegTime, m.Key, dat, string(dat))
 		}
 	}()
 
@@ -42,7 +43,7 @@ func main() {
 		1*time.Second,
 		func() {
 			fmt.Println("Putting message")
-			ms.PutMessages(qn, *msgsrv.GetMsg("greetings", strings.NewReader("Hello Dober!")))
+			ms.PutMessages(qn, *msgsrv.MustGetMsg("greetings", strings.NewReader("Hello Dober!")))
 		})
 
 	fmt.Println("Closing...")

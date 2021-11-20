@@ -31,13 +31,52 @@ func (mse MessageServerError) Error() string {
 
 // NewMessageServerError creates one Message Server error
 func NewMessageServerError(ms *MessageServer, msg string, err error) error {
+
 	return MessageServerError{ms, msg, err}
 }
 
 type Message struct {
 	RegTime time.Time
 	Key     string
-	Data    []byte
+	data    []byte
+	readed  int
+}
+
+// Read implements a io.Reader interface for
+// m.data.
+func (m *Message) Read(p []byte) (n int, err error) {
+	ln := len(p)
+	if ln == 0 {
+		return
+	}
+
+	n = copy(p, m.data[m.readed:])
+
+	m.readed += n
+	if m.readed == len(m.data) {
+		err = io.EOF
+	}
+
+	return
+}
+
+// Data returns a copy of m.data.
+func (m *Message) Data() []byte {
+
+	return append([]byte{}, m.data...)
+}
+
+// GetCopy creates and returns a copy of
+// the whole Message m.
+func (m *Message) GetCopy() *Message {
+
+	nm := &Message{
+		RegTime: m.RegTime,
+		Key:     m.Key,
+		data:    append([]byte{}, m.data...),
+	}
+
+	return nm
 }
 
 // NewMsg creates an Message with Key key and Data data and returns the pointer
@@ -59,11 +98,11 @@ func NewMsg(key string, r io.Reader) (*Message, error) {
 				nil)
 	}
 
-	return &Message{Key: key, Data: b}, nil
+	return &Message{Key: key, data: b}, nil
 }
 
-// GetMsg returns a Message or rise panic on error.
-func GetMsg(key string, r io.Reader) *Message {
+// MustGetMsg returns a Message or rise panic on error.
+func MustGetMsg(key string, r io.Reader) *Message {
 	m, err := NewMsg(key, r)
 	if err != nil {
 		panic(err.Error())
@@ -125,7 +164,8 @@ func (ms *MessageServer) PutMessages(qname string, msg ...Message) error {
 
 	for _, m := range msg {
 		q.Lock()
-		q.messages = append(q.messages, &Message{time.Now(), m.Key, m.Data})
+		m.RegTime = time.Now()
+		q.messages = append(q.messages, m.GetCopy())
 		q.Unlock()
 	}
 
@@ -159,7 +199,7 @@ func (ms *MessageServer) GetMesages(qname string) ([]Message, error) {
 	defer q.Unlock()
 
 	for _, m := range q.messages[q.lastReaded:] {
-		mm = append(mm, Message{m.RegTime, m.Key, m.Data})
+		mm = append(mm, *m.GetCopy())
 	}
 	q.lastReaded = len(q.messages)
 

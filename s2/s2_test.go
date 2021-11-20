@@ -84,14 +84,14 @@ func TestMessageServices(t *testing.T) {
 		"PutMsg Service",
 		ms,
 		qn,
-		msgsrv.GetMsg(m[0].k, bytes.NewBufferString(m[0].v)))
+		msgsrv.MustGetMsg(m[0].k, bytes.NewBufferString(m[0].v)))
 
 	is.NoErr(err)
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	defer cancelCtx()
 
-	srv := NewServiceServer("test_service_server", ctx)
+	srv := NewServiceServer("test_message_service_server", ctx)
 
 	is.NoErr(srv.AddService(pms))
 
@@ -100,14 +100,15 @@ func TestMessageServices(t *testing.T) {
 
 	is.NoErr(srv.Start(ctx))
 
-	msgPrinter := func(res chan interface{}) error {
+	msgPrinter := func(res <-chan interface{}) error {
 		fmt.Println("Printing gathered messages:")
 		for mc := range res {
 			m, ok := mc.(msgsrv.Message)
 			if !ok {
 				t.Error("Couldn't get a message from", mc)
+				continue
 			}
-			fmt.Println(m.Key, " = ", string(m.Data))
+			fmt.Println(m.Key, " = ", string(m.Data()))
 		}
 
 		return nil

@@ -286,12 +286,10 @@ func (gms *GetMgSvc) Run(ctx context.Context) error {
 		for _, m := range mm {
 			gms.mm = append(gms.mm, &m)
 			if gms.maxMsgNum != 0 && len(gms.mm) == int(gms.maxMsgNum) {
-				goto maxMsgNum_reached
+				return nil
 			}
 		}
 	}
-
-maxMsgNum_reached:
 
 	return nil
 }
