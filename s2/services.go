@@ -43,7 +43,7 @@ func NewOutputSvc(
 
 	os := new(OutputSvc)
 	os.id = uuid.New()
-	os.Name = sname
+	os.name = sname
 	os.w = w
 	os.v = append(os.v, vv...)
 
@@ -140,7 +140,7 @@ func NewPutMessagesSvc(
 
 	pms := new(PutMsgSvc)
 	pms.id = uuid.New()
-	pms.Name = sname
+	pms.name = sname
 	pms.qname = qname
 	pms.ms = ms
 	pms.mm = append(pms.mm, mm...)
@@ -230,7 +230,7 @@ func NewGetMessagesSvc(
 
 	gms := new(GetMgSvc)
 	gms.id = uuid.New()
-	gms.Name = name
+	gms.name = name
 	gms.ms = ms
 	gms.qname = qname
 	gms.timeout = timeout

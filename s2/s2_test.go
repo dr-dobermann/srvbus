@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"testing"
 	"time"
@@ -11,6 +12,18 @@ import (
 	"github.com/dr-dobermann/srvbus/msgsrv"
 	"github.com/matryer/is"
 )
+
+func TestMessage(t *testing.T) {
+	is := is.New(t)
+
+	s := "This is a test string"
+	m := msgsrv.MustGetMsg("test", bytes.NewBufferString(s))
+
+	var mv bytes.Buffer
+	io.Copy(&mv, m)
+
+	is.Equal(mv.String(), s)
+}
 
 func TestOutputService(t *testing.T) {
 	is := is.New(t)
@@ -59,14 +72,11 @@ func TestServiceServer(t *testing.T) {
 	is.NoErr(srv.AddService(GetOutputSvc("Output Service 2", os.Stderr, "Hello again Dober!\n")))
 
 	srv.Start(ctx)
-
-	fmt.Println("Pause for 3 seconds...")
 	time.Sleep(3 * time.Second)
 
 	stat := srv.Stats()
 	fmt.Println(stat)
 
-	is.Equal(srv.state, SrvExecutingServices)
 	is.Equal(buf.String(), "Hello world! Hello Dober!")
 
 }
@@ -102,23 +112,27 @@ func TestMessageServices(t *testing.T) {
 
 	msgPrinter := func(res <-chan interface{}) error {
 		fmt.Println("Printing gathered messages:")
+		i := 0
 		for mc := range res {
-			m, ok := mc.(msgsrv.Message)
+			msg, ok := mc.(msgsrv.Message)
 			if !ok {
 				t.Error("Couldn't get a message from", mc)
 				continue
 			}
-			fmt.Println(m.Key, " = ", string(m.Data()))
+			// printing messages
+			fmt.Println("@", msg.RegTime, ": key =", msg.Key, ",  value =", string(msg.Data()))
+
+			// test message values aginst it's origin
+			is.Equal(msg.Key, m[i].k)
+			is.Equal(string(msg.Data()), m[i].v)
+
+			i++
 		}
 
 		return nil
 	}
 
 	is.NoErr(gms.UploadResults(ctx, msgPrinter))
-
-	fmt.Println("Waiting for results for 5 seconds...")
-
-	time.Sleep(5 * time.Second)
 
 	fmt.Println(srv.Stats())
 }

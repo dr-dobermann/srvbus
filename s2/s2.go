@@ -25,6 +25,9 @@ type Uploader func(results <-chan interface{}) error
 type Service interface {
 	// Id returns Service's ID
 	Id() uuid.UUID
+
+	Name() string
+
 	// Run runs a service with cancelable context.
 	Run(ctx context.Context) error
 
@@ -71,7 +74,7 @@ type svcBase struct {
 	sync.Mutex
 
 	id        uuid.UUID
-	Name      string
+	name      string
 	state     ServiceState
 	timeout   time.Duration
 	LastError error
@@ -83,7 +86,13 @@ type svcBase struct {
 }
 
 func (sb *svcBase) Id() uuid.UUID {
+
 	return sb.id
+}
+
+func (sb *svcBase) Name() string {
+
+	return sb.name
 }
 
 // UpdateTimer calculates new time to start the Service.
@@ -194,6 +203,7 @@ type ServiceServerError struct {
 	Err     error
 }
 
+// Error implements error interface for ServiceServerError
 func (err ServiceServerError) Error() string {
 	em := "[" + err.Sname + "] " + err.Message
 
@@ -320,7 +330,7 @@ func (ss *ServiceServer) Start(ctx context.Context) error {
 	}()
 
 	go func() {
-		for {
+		for ss.state == SrvExecutingServices {
 			select {
 			case <-ctx.Done():
 				ss.state = SrvStopped
@@ -346,6 +356,25 @@ func (ss *ServiceServer) Start(ctx context.Context) error {
 	return nil
 }
 
+// Stops trying to stop the ServiceServier after all Services
+// finished or failed.
+//
+// if timeout for stipping is passed, then error returns.
+func (ss *ServiceServer) Stop(timeout time.Duration) error {
+
+	limit := time.Now().Add(timeout)
+	for time.Now().Before(limit) {
+		if ss.canStop() {
+			ss.Lock()
+			ss.state = SrvStopped
+			ss.Unlock()
+
+			return nil
+		}
+	}
+	return NewSvcSrvError(ss.Name, "timeout for stopping exceeded", nil)
+}
+
 // ServerStatistics gather and returns the server statistics
 func (ss *ServiceServer) Stats() ServerStatistics {
 	stat := new(ServerStatistics)
@@ -360,19 +389,22 @@ func (ss *ServiceServer) Stats() ServerStatistics {
 		switch st {
 		case SSRunned:
 			stat.Runned++
+			stat.RunnedSvc = append(stat.RunnedSvc, s.Name())
 
 		case SSFinished:
 			stat.Ended++
+			stat.EndedSvc = append(stat.EndedSvc, s.Name())
 
 		case SSFailed:
 			stat.Failed++
+			stat.FailedSvc = append(stat.FailedSvc, s.Name())
 		}
 	}
 
 	return *stat
 }
 
-func (ss *ServiceServer) CanStop() bool {
+func (ss *ServiceServer) canStop() bool {
 
 	return ss.Stats().Runned == 0
 }
@@ -385,6 +417,9 @@ type ServerStatistics struct {
 	Runned     int
 	Ended      int
 	Failed     int
+	RunnedSvc  []string
+	EndedSvc   []string
+	FailedSvc  []string
 }
 
 func (ss ServerStatistics) String() string {
@@ -393,12 +428,14 @@ func (ss ServerStatistics) String() string {
 			"================================================\n"+
 			"  State : %s\n"+
 			"  Registered Services    : %d\n"+
-			"  Runned Services        : %d\n"+
-			"  Ended Services         : %d\n"+
-			"  Failed Services        : %d\n",
+			"  Runned Services        : %d (%v)\n"+
+			"  Ended Services         : %d (%v)\n"+
+			"  Failed Services        : %d (%v)\n",
 		ss.SrvName, ss.State.String(),
-		ss.Registered, ss.Runned,
-		ss.Ended, ss.Failed)
+		ss.Registered,
+		ss.Runned, ss.RunnedSvc,
+		ss.Ended, ss.EndedSvc,
+		ss.Failed, ss.FailedSvc)
 }
 
 //-----------------------------------------------------------------------------
