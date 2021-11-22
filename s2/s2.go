@@ -64,7 +64,7 @@ func (ss ServiceState) String() string {
 	}[ss]
 }
 
-type srvState struct {
+type svcState struct {
 	srvID uuid.UUID
 	err   error
 }
@@ -287,7 +287,8 @@ func (ss *ServiceServer) AddService(s Service) error {
 	return nil
 }
 
-// Start runs ServiceServer if is ready and there are registered Services on it.
+// Start runs ServiceServer if is ready and there are registered
+// Services on it.
 func (ss *ServiceServer) Start(ctx context.Context) error {
 	ss.Lock()
 	defer ss.Unlock()
@@ -302,9 +303,9 @@ func (ss *ServiceServer) Start(ctx context.Context) error {
 	}
 	ss.state = SrvExecutingServices
 
-	sChan := make(chan srvState)
+	sChan := make(chan svcState)
 
-	// start service monitor to mark broken services
+	// start service monitor to mark Failed or Ended services
 	// if it returns non-nil error
 	go func() {
 		for {
@@ -344,7 +345,7 @@ func (ss *ServiceServer) Start(ctx context.Context) error {
 						s.SetState(SSRunned, nil)
 						go func() {
 							err := s.Run(ctx)
-							sChan <- srvState{s.Id(), err}
+							sChan <- svcState{s.Id(), err}
 						}()
 					}
 				}
@@ -359,20 +360,29 @@ func (ss *ServiceServer) Start(ctx context.Context) error {
 // Stops trying to stop the ServiceServier after all Services
 // finished or failed.
 //
-// if timeout for stipping is passed, then error returns.
-func (ss *ServiceServer) Stop(timeout time.Duration) error {
+// if timeout for stopping is passed, then error returns.
+func (ss *ServiceServer) Stop(ctx context.Context, timeout time.Duration) error {
 
-	limit := time.Now().Add(timeout)
-	for time.Now().Before(limit) {
-		if ss.canStop() {
-			ss.Lock()
-			ss.state = SrvStopped
-			ss.Unlock()
+	timer := time.After(timeout)
 
-			return nil
+	for !ss.canStop() {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("server %s stopped by context : %w", ss.Name, ctx.Err())
+
+		case <-timer:
+			return NewSvcSrvError(ss.Name, "timeout for stopping exceeded", nil)
+
+		default:
+
 		}
 	}
-	return NewSvcSrvError(ss.Name, "timeout for stopping exceeded", nil)
+
+	ss.Lock()
+	ss.state = SrvStopped
+	ss.Unlock()
+
+	return nil
 }
 
 // ServerStatistics gather and returns the server statistics
@@ -406,7 +416,7 @@ func (ss *ServiceServer) Stats() ServerStatistics {
 
 func (ss *ServiceServer) canStop() bool {
 
-	return ss.Stats().Runned == 0
+	return len(ss.services) == 0 || ss.Stats().Runned == 0
 }
 
 // ServerStatistics represents status information.
