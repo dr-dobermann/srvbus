@@ -51,7 +51,7 @@ func TestServiceServer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := NewServiceServer("test_server", ctx)
+	srv := NewServiceServer(ctx, "test_server")
 	if srv == nil {
 		t.Fatal("Couldn't create a server")
 	}
@@ -101,7 +101,7 @@ func TestMessageServices(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	defer cancelCtx()
 
-	srv := NewServiceServer("test_message_service_server", ctx)
+	srv := NewServiceServer(ctx, "test_message_service_server")
 
 	is.NoErr(srv.AddService(pms))
 

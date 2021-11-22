@@ -27,12 +27,11 @@ var ErrOutpSvcFailOutput = errors.New("output error")
 
 // NewOutputService creates a new Service based on OutputSrv.
 //
-// If Writer w is nil or vv lenght is zero, then error returned.
+// If Writer w is nil or vv length is zero, then error returned.
 func NewOutputSvc(
 	sname string,
 	w io.Writer,
-	vv ...interface{}) (Service, error) {
-
+	vv ...interface{}) (*OutputSvc, error) {
 	if w == nil {
 		return nil, ErrOutpSvcNoWriter
 	}
@@ -51,7 +50,7 @@ func NewOutputSvc(
 }
 
 // GetOutputService returns an Output Service or rise panic on error.
-func GetOutputSvc(sname string, w io.Writer, vv ...interface{}) Service {
+func GetOutputSvc(sname string, w io.Writer, vv ...interface{}) *OutputSvc {
 	srv, err := NewOutputSvc(sname, w, vv...)
 	if err != nil {
 		panic(fmt.Sprintf("couldn't create an Output Service : %v", err))
@@ -67,6 +66,7 @@ func GetOutputSvc(sname string, w io.Writer, vv ...interface{}) Service {
 func (os *OutputSvc) Run(_ context.Context) error {
 	if os.w == nil {
 		os.state = SSFailed
+
 		return ErrOutpSvcNoWriter
 	}
 
@@ -103,8 +103,7 @@ func GetPutMessageSvc(
 	name string,
 	ms *msgsrv.MessageServer,
 	qname string,
-	mm ...*msgsrv.Message) Service {
-
+	mm ...*msgsrv.Message) *PutMsgSvc {
 	pms, err := NewPutMessagesSvc(name, ms, qname, mm...)
 
 	if err != nil {
@@ -120,8 +119,7 @@ func NewPutMessagesSvc(
 	sname string,
 	ms *msgsrv.MessageServer,
 	qname string,
-	mm ...*msgsrv.Message) (Service, error) {
-
+	mm ...*msgsrv.Message) (*PutMsgSvc, error) {
 	if sname == "" {
 		sname = "PutMessages Service"
 	}
@@ -150,13 +148,13 @@ func NewPutMessagesSvc(
 
 // Run puts all messages from pms.mm into queue pms.qname on server pms.ms
 func (pms *PutMsgSvc) Run(_ context.Context) error {
-
 	mm := make([]msgsrv.Message, 0)
 	for _, m := range pms.mm {
 		mm = append(mm, *m)
 	}
 
-	return pms.ms.PutMessages(pms.qname, mm...)
+	return fmt.Errorf("error during putting messages on server %s : %w",
+		pms.ms.Name, pms.ms.PutMessages(pms.qname, mm...))
 }
 
 // ----------------------------------------------------------------------------
@@ -183,8 +181,7 @@ func GetGetMessagesSvc(
 	qname string,
 	timeout uint8,
 	attempts uint8,
-	maxMsgNum uint8) Service {
-
+	maxMsgNum uint8) *GetMgSvc {
 	gms, err := NewGetMessagesSvc(name, ms, qname,
 		timeout, attempts, maxMsgNum)
 	if err != nil {
@@ -198,7 +195,7 @@ func GetGetMessagesSvc(
 // from MessageServer ms from queue qname.
 //
 // If there is no messages to read or there is no queue qname yet, the
-// services tries to make the number of attemps sent in param attempts over
+// services tries to make the number of attempts sent in param attempts over
 // timeout period in seconds between them.
 // If timeout is 0 or attempts is 0 the Service will read messages only once.
 //
@@ -210,8 +207,7 @@ func NewGetMessagesSvc(
 	qname string,
 	timeout uint8,
 	attempts uint8,
-	maxMsgNum uint8) (Service, error) {
-
+	maxMsgNum uint8) (*GetMgSvc, error) {
 	if name == "" {
 		name = "GetMessages Service"
 	}
@@ -261,7 +257,6 @@ func NewGetMessagesSvc(
 // if the queue is present the Service tries to read msxMsgNum messages
 // or all available messages if maxMsgNum is 0.
 func (gms *GetMgSvc) Run(ctx context.Context) error {
-
 	if gms.ms == nil || gms.qname == "" {
 		return ErrInvalidMsgSrv
 	}
@@ -271,7 +266,8 @@ func (gms *GetMgSvc) Run(ctx context.Context) error {
 		if !gms.ms.HasQueue(gms.qname) {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return fmt.Errorf("service %s[%s] stopped "+
+					"by context.cancel : %w", gms.name, gms.id.String(), ctx.Err())
 
 			case <-time.After(time.Duration(gms.timeout) * time.Second):
 				continue
@@ -280,11 +276,12 @@ func (gms *GetMgSvc) Run(ctx context.Context) error {
 
 		mm, err := gms.ms.GetMesages(gms.qname)
 		if err != nil {
-			return err
+			return fmt.Errorf("couldn't get messages from server %s : %w",
+				gms.ms.Name, err)
 		}
 
 		for _, m := range mm {
-			gms.mm = append(gms.mm, &m)
+			gms.mm = append(gms.mm, m.GetCopy())
 			if gms.maxMsgNum != 0 && len(gms.mm) == int(gms.maxMsgNum) {
 				return nil
 			}
