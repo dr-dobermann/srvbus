@@ -15,23 +15,23 @@ type MessageServerError struct {
 }
 
 func (mse MessageServerError) Error() string {
-	em := ""
+	eMsg := ""
+
 	if mse.ms != nil {
-		em += "[" + mse.ms.Name + "] "
+		eMsg += "[" + mse.ms.Name + "] "
 	}
 
-	em += em + mse.msg
+	eMsg += eMsg + mse.msg
 
 	if mse.Err != nil {
-		em += " : " + mse.Err.Error()
+		eMsg += " : " + mse.Err.Error()
 	}
 
-	return em
+	return eMsg
 }
 
 // NewMessageServerError creates one Message Server error
 func NewMessageServerError(ms *MessageServer, msg string, err error) error {
-
 	return MessageServerError{ms, msg, err}
 }
 
@@ -45,8 +45,7 @@ type Message struct {
 // Read implements a io.Reader interface for
 // m.data.
 func (m *Message) Read(p []byte) (n int, err error) {
-	ln := len(p)
-	if ln == 0 {
+	if len(p) == 0 {
 		return
 	}
 
@@ -62,43 +61,40 @@ func (m *Message) Read(p []byte) (n int, err error) {
 
 // Data returns a copy of m.data.
 func (m *Message) Data() []byte {
-
 	return append([]byte{}, m.data...)
 }
 
 // GetCopy creates and returns a copy of
 // the whole Message m.
 func (m *Message) GetCopy() *Message {
-
-	nm := &Message{
+	return &Message{
 		RegTime: m.RegTime,
 		Key:     m.Key,
 		data:    append([]byte{}, m.data...),
 	}
-
-	return nm
 }
 
 // NewMsg creates an Message with Key key and Data data and returns the pointer
 // to it.
 // if the data is more than 8k, then error will be returned.
 func NewMsg(key string, r io.Reader) (*Message, error) {
-
-	b, err := ioutil.ReadAll(r)
+	buf, err := ioutil.ReadAll(r)
 	if err != nil && err != io.EOF {
 		return nil, NewMessageServerError(nil,
 			"couldn't read data for meddage "+key,
 			err)
 	}
 
-	if len(b) > 8*(2<<10) {
+	const maxMsgDataLen = 8 * (1 << 10) // 8kbytes
+
+	if len(buf) > maxMsgDataLen {
 		return nil,
 			NewMessageServerError(nil,
-				fmt.Sprintf("message %s is too large :%d ", key, len(b)),
+				fmt.Sprintf("message %s is too large :%d ", key, len(buf)),
 				nil)
 	}
 
-	return &Message{Key: key, data: b}, nil
+	return &Message{Key: key, data: buf}, nil
 }
 
 // MustGetMsg returns a Message or rise panic on error.
@@ -144,64 +140,67 @@ func NewMessageServer(name string) *MessageServer {
 
 // PutMessages puts a list of messages into queue qname.
 // If name of queue is empty, then error will be returned.
-// If lenght of msg is 0, then error will be returned.
+// If length of msg is 0, then error will be returned.
 func (ms *MessageServer) PutMessages(qname string, msg ...Message) error {
 	if qname == "" {
 		return NewMessageServerError(ms, "queue name is empty", nil)
 	}
 
 	ms.Lock()
-	q, ok := ms.queues[qname]
+	queue, ok := ms.queues[qname]
+
 	if !ok {
 		ms.queues[qname] = &MQueue{
 			name:       qname,
 			messages:   []*Message{},
 			lastReaded: 0}
 
-		q = ms.queues[qname]
+		queue = ms.queues[qname]
 	}
 	ms.Unlock()
 
 	for _, m := range msg {
-		q.Lock()
+		queue.Lock()
 		m.RegTime = time.Now()
-		q.messages = append(q.messages, m.GetCopy())
-		q.Unlock()
+		queue.messages = append(queue.messages, m.GetCopy())
+		queue.Unlock()
 	}
 
 	return nil
 }
 
-func checkQueue(ms *MessageServer, qname string) (*MQueue, error) {
-	ms.Lock()
-	q, ok := ms.queues[qname]
-	ms.Unlock()
+func checkQueue(mSrv *MessageServer, qname string) (*MQueue, error) {
+	mSrv.Lock()
+	queue, ok := mSrv.queues[qname]
+	mSrv.Unlock()
 
 	if !ok {
 		return nil,
-			NewMessageServerError(ms,
+			NewMessageServerError(mSrv,
 				"couldn't find queue "+qname, nil)
 	}
 
-	return q, nil
+	return queue, nil
 }
 
 // GetMessages returns a list of messages from queue qname.
 func (ms *MessageServer) GetMesages(qname string) ([]Message, error) {
-	mm := []Message{}
+	queue, err := checkQueue(ms, qname)
 
-	q, err := checkQueue(ms, qname)
 	if err != nil {
 		return nil, err
 	}
 
-	q.Lock()
-	defer q.Unlock()
+	queue.Lock()
+	defer queue.Unlock()
 
-	for _, m := range q.messages[q.lastReaded:] {
+	mm := []Message{}
+
+	for _, m := range queue.messages[queue.lastReaded:] {
 		mm = append(mm, *m.GetCopy())
 	}
-	q.lastReaded = len(q.messages)
+
+	queue.lastReaded = len(queue.messages)
 
 	return mm, nil
 }
