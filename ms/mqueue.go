@@ -10,9 +10,9 @@ import (
 
 // =============================================================================
 
-// msgEnvelope holds the Message itself and the time when it was added
+// MsgEnvelope holds the Message itself and the time when it was added
 // to the queue and the Sender id who sent the Message into the queue.
-type msgEnvelope struct {
+type MsgEnvelope struct {
 	Message
 
 	Registered time.Time
@@ -30,7 +30,7 @@ type msgRegRequest struct {
 type MQueue struct {
 	id       uuid.UUID
 	name     string
-	messages []*msgEnvelope
+	messages []*MsgEnvelope
 
 	// lastReaded holds the last readed message id for the
 	// particular reader
@@ -66,7 +66,7 @@ func (q *MQueue) regLoop() {
 				return
 			}
 
-			me := new(msgEnvelope)
+			me := new(MsgEnvelope)
 			me.Message = mrr.msg
 			me.Registered = time.Now()
 			me.sender = mrr.sender
@@ -110,7 +110,7 @@ func newQueue(
 	q := MQueue{
 		id:         id,
 		name:       name,
-		messages:   make([]*msgEnvelope, 0),
+		messages:   make([]*MsgEnvelope, 0),
 		lastReaded: make(map[uuid.UUID]int),
 		log:        log,
 		regCh:      make(chan msgRegRequest),
@@ -132,7 +132,7 @@ func (q *MQueue) Stop() {
 // PutMessages puts messages into the queue q.
 //
 // if there are no messages then error will be returned.
-func (q *MQueue) PutMessages(sender uuid.UUID, msgs ...Message) chan error {
+func (q *MQueue) PutMessages(sender uuid.UUID, msgs ...*Message) chan error {
 
 	resChan := make(chan error, 1)
 
@@ -153,10 +153,10 @@ func (q *MQueue) PutMessages(sender uuid.UUID, msgs ...Message) chan error {
 		return resChan
 	}
 
-	go func(sender uuid.UUID, msgs []Message) {
+	go func(sender uuid.UUID, msgs []*Message) {
 		for _, m := range msgs {
 			m := m
-			q.regCh <- msgRegRequest{sender: sender, msg: m}
+			q.regCh <- msgRegRequest{sender: sender, msg: *m}
 			q.log.Debugw("message registration request sent",
 				"queue", q.name,
 				"msgID", m.id,
@@ -171,7 +171,9 @@ func (q *MQueue) PutMessages(sender uuid.UUID, msgs ...Message) chan error {
 }
 
 // GetMessages returns a slice of messageEnvelopes
-func (q *MQueue) GetMessages(reciever uuid.UUID, fromBegin bool) ([]msgEnvelope, error) {
+func (q *MQueue) GetMessages(
+	reciever uuid.UUID,
+	fromBegin bool) ([]MsgEnvelope, error) {
 
 	if reciever == uuid.Nil {
 		q.log.Errorw("reciever of messages isn't set", "queue", q.name)
@@ -183,7 +185,7 @@ func (q *MQueue) GetMessages(reciever uuid.UUID, fromBegin bool) ([]msgEnvelope,
 	if fromBegin {
 		from = 0
 	}
-	var mes []msgEnvelope
+	var mes []MsgEnvelope
 	for _, m := range q.messages[from:] {
 		mes = append(mes, *m)
 	}

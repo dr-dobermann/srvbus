@@ -2,6 +2,7 @@ package ms
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -9,103 +10,32 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestMsg(t *testing.T) {
+func TestMSrv(t *testing.T) {
 	is := is.New(t)
 
-	key := "Greetings"
-	value := "Hello Dober!"
-
-	msg, err := NewMsg(uuid.Nil, key, bytes.NewBufferString(value))
+	log, err := zap.NewDevelopment()
 	is.NoErr(err)
 
-	is.Equal(string(msg.Data()), value)
+	sugar := log.Sugar()
 
-	msg2 := msg.Copy()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	var buf bytes.Buffer
-	buf.ReadFrom(msg2)
-
-	is.Equal(buf.String(), value)
-}
-
-func TestQueue(t *testing.T) {
-	is := is.New(t)
-
-	qn := "test_queue"
-	mm := []struct{ key, value string }{
-		{"msg1", "hello Dober!"},
-		{"msg2", "hello again, Dober!"}}
-
-	logger, err := zap.NewDevelopment()
+	const msn = "test_mserver"
+	ms, err := New(ctx, uuid.Nil, msn, sugar)
 	is.NoErr(err)
+	is.True(ms != nil)
 
-	defer logger.Sync()
+	qm := "test_queue"
+	mm := []struct{ key, val string }{
+		{key: "key1", val: "Hello Dober!"},
+		{key: "key2", val: "Hello again Dober!"}}
 
-	// queue creating tests
-	sugar := logger.Sugar()
+	errc := ms.PutMessages(
+		qm,
+		GetMsg(uuid.Nil, mm[0].key, bytes.NewBufferString(mm[0].val)),
+		GetMsg(uuid.Nil, mm[1].key, bytes.NewBufferString(mm[0].val)))
+	is.True(errc != nil)
 
-	q, err := newQueue(uuid.Nil, qn, sugar)
-	is.NoErr(err)
-	is.Equal(qn, q.Name())
-	is.True(q.ID() != uuid.Nil)
-
-	t.Run("queue with no logger",
-		func(t *testing.T) {
-			q2, err := newQueue(uuid.Nil, "", nil)
-			is.True(err != nil)
-			is.Equal(q2, nil)
-		})
-
-	t.Run("auto-set of queue name",
-		func(t *testing.T) {
-			qid := uuid.New()
-			q2, err := newQueue(qid, "", sugar)
-			is.NoErr(err)
-			is.Equal(q2.Name(), "MQueue #"+qid.String())
-		})
-
-	// testing of putting messages into the queue
-	t.Run("empty msg list",
-		func(t *testing.T) {
-			if err = <-q.PutMessages(uuid.New(), []Message{}...); err == nil {
-				t.Error("put empty messages list")
-			}
-		})
-
-	var msgs []Message
-	for _, m := range mm {
-		msgs = append(msgs,
-			*GetMsg(uuid.Nil, m.key, bytes.NewBufferString(m.value)))
-	}
-
-	err = <-q.PutMessages(uuid.New(), msgs...)
-	is.NoErr(err)
-
-	is.Equal(q.Count(), 2)
-
-	// testing of getting messages from the queue
-	t.Run("empty_reciever", func(t *testing.T) {
-		_, err := q.GetMessages(uuid.Nil, false)
-		is.True(err != nil)
-	})
-
-	recieverID := uuid.New()
-	mes, err := q.GetMessages(recieverID, false)
-	is.NoErr(err)
-	is.Equal(len(mes), 2)
-
-	for i, m := range mes {
-		is.Equal(m.Key, mm[i].key)
-		is.Equal(string(m.Data()), mm[i].value)
-	}
-
-	// trying to read new messages
-	mes, err = q.GetMessages(recieverID, false)
-	is.NoErr(err)
-	is.Equal(len(mes), 0)
-
-	// rereading messages from the begin
-	mes, err = q.GetMessages(recieverID, true)
-	is.NoErr(err)
-	is.Equal(len(mes), 2)
+	is.NoErr(<-errc)
 }
