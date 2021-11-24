@@ -4,14 +4,22 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+
+	"github.com/google/uuid"
 )
 
 // =============================================================================
 // Message represent the single message on the server
 type Message struct {
+	id     uuid.UUID
 	Key    string
 	data   []byte
 	readed int
+}
+
+// ID returns a message id.
+func (m Message) ID() uuid.UUID {
+	return m.id
 }
 
 // Read implements a io.Reader interface for
@@ -49,7 +57,11 @@ func (m *Message) Copy() *Message {
 // to it.
 
 // if the data is more than 8k, then error will be returned.
-func NewMsg(key string, r io.Reader) (*Message, error) {
+func NewMsg(id uuid.UUID, key string, r io.Reader) (*Message, error) {
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+
 	buf, err := ioutil.ReadAll(r)
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("message %s creation : %w", key, err)
@@ -61,12 +73,12 @@ func NewMsg(key string, r io.Reader) (*Message, error) {
 		return nil, fmt.Errorf("message %s is too large :%d ", key, len(buf))
 	}
 
-	return &Message{Key: key, data: buf}, nil
+	return &Message{id: id, Key: key, data: buf}, nil
 }
 
 // GetMsg returns a Message or rise panic on error.
-func GetMsg(key string, r io.Reader) *Message {
-	m, err := NewMsg(key, r)
+func GetMsg(id uuid.UUID, key string, r io.Reader) *Message {
+	m, err := NewMsg(id, key, r)
 	if err != nil {
 		panic(err.Error())
 	}
