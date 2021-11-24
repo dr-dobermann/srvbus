@@ -82,4 +82,30 @@ func TestQueue(t *testing.T) {
 	is.NoErr(err)
 
 	is.Equal(q.Count(), 2)
+
+	// testing of getting messages from the queue
+	t.Run("empty_reciever", func(t *testing.T) {
+		_, err := q.GetMessages(uuid.Nil, false)
+		is.True(err != nil)
+	})
+
+	recieverID := uuid.New()
+	mes, err := q.GetMessages(recieverID, false)
+	is.NoErr(err)
+	is.Equal(len(mes), 2)
+
+	for i, m := range mes {
+		is.Equal(m.Key, mm[i].key)
+		is.Equal(string(m.Data()), mm[i].value)
+	}
+
+	// trying to read new messages
+	mes, err = q.GetMessages(recieverID, false)
+	is.NoErr(err)
+	is.Equal(len(mes), 0)
+
+	// rereading messages from the begin
+	mes, err = q.GetMessages(recieverID, true)
+	is.NoErr(err)
+	is.Equal(len(mes), 2)
 }

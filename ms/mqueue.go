@@ -82,6 +82,7 @@ func (q *MQueue) regLoop() {
 	}
 }
 
+// Count returns number of messages in the queue.
 func (q *MQueue) Count() int {
 	return len(q.messages)
 }
@@ -123,6 +124,7 @@ func newQueue(
 	return &q, nil
 }
 
+// Stop stops the message registration cycle.
 func (q *MQueue) Stop() {
 	close(q.stopCh)
 }
@@ -138,8 +140,8 @@ func (q *MQueue) PutMessages(sender uuid.UUID, msgs ...Message) chan error {
 		q.log.Errorw("couldn't put empty message list on queue",
 			"queue", q.name)
 
-		resChan <- fmt.Errorf("couldn't put an empty messages list into queue %s",
-			q.name)
+		resChan <- fmt.Errorf("couldn't put an empty messages "+
+			"list into queue %s", q.name)
 		return resChan
 
 	}
@@ -162,7 +164,35 @@ func (q *MQueue) PutMessages(sender uuid.UUID, msgs ...Message) chan error {
 		}
 
 		close(resChan)
+
 	}(sender, msgs)
 
 	return resChan
+}
+
+// GetMessages returns a slice of messageEnvelopes
+func (q *MQueue) GetMessages(reciever uuid.UUID, fromBegin bool) ([]msgEnvelope, error) {
+
+	if reciever == uuid.Nil {
+		q.log.Errorw("reciever of messages isn't set", "queue", q.name)
+		return nil,
+			fmt.Errorf("reciever of message isn't set for queue %s", q.name)
+	}
+
+	from := q.lastReaded[reciever]
+	if fromBegin {
+		from = 0
+	}
+	var mes []msgEnvelope
+	for _, m := range q.messages[from:] {
+		mes = append(mes, *m)
+	}
+
+	n := len(mes)
+
+	q.lastReaded[reciever] = from + n
+
+	q.log.Debugw("returnign messages", "count", n)
+
+	return mes, nil
 }
