@@ -58,11 +58,14 @@ func (q *MQueue) regLoop() {
 		select {
 		case <-q.stopCh:
 			close(q.regCh)
-			close(q.stopCh)
 
 			return
 
 		case mrr := <-q.regCh:
+			if mrr.sender == uuid.Nil {
+				return
+			}
+
 			me := new(msgEnvelope)
 			me.Message = mrr.msg
 			me.Registered = time.Now()
@@ -118,6 +121,10 @@ func newQueue(
 	log.Debugw("new message queue is created", "name", q.name, "id", q.id)
 
 	return &q, nil
+}
+
+func (q *MQueue) Stop() {
+	close(q.stopCh)
 }
 
 // PutMessages puts messages into the queue q.
