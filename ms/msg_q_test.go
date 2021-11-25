@@ -61,7 +61,7 @@ func TestQueue(t *testing.T) {
 			qid := uuid.New()
 			q2, err := newQueue(qid, "", sugar)
 			is.NoErr(err)
-			is.Equal(q2.Name(), "MQueue #"+qid.String())
+			is.Equal(q2.Name(), "mQueue #"+qid.String())
 		})
 
 	// testing of putting messages into the queue

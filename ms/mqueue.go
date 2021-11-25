@@ -17,7 +17,7 @@ type MsgEnvelope struct {
 
 	Registered time.Time
 	sender     uuid.UUID
-	queue      *MQueue
+	queue      *mQueue
 }
 
 // msgRegRequest is used for message registration on server.
@@ -27,7 +27,7 @@ type msgRegRequest struct {
 }
 
 // Message Queue
-type MQueue struct {
+type mQueue struct {
 	id       uuid.UUID
 	name     string
 	messages []*MsgEnvelope
@@ -43,17 +43,17 @@ type MQueue struct {
 }
 
 // ID returns a queue's id
-func (q MQueue) ID() uuid.UUID {
+func (q mQueue) ID() uuid.UUID {
 	return q.id
 }
 
 // Name returns queue's name
-func (q MQueue) Name() string {
+func (q mQueue) Name() string {
 	return q.name
 }
 
 // regLoop gets message registration request from user q.PutMessages
-func (q *MQueue) regLoop() {
+func (q *mQueue) regLoop() {
 	for {
 		select {
 		case <-q.stopCh:
@@ -83,7 +83,7 @@ func (q *MQueue) regLoop() {
 }
 
 // Count returns number of messages in the queue.
-func (q *MQueue) Count() int {
+func (q *mQueue) Count() int {
 	return len(q.messages)
 }
 
@@ -93,7 +93,7 @@ func (q *MQueue) Count() int {
 func newQueue(
 	id uuid.UUID,
 	name string,
-	log *zap.SugaredLogger) (*MQueue, error) {
+	log *zap.SugaredLogger) (*mQueue, error) {
 
 	if log == nil {
 		return nil, fmt.Errorf("nil logger given for queue %s", name)
@@ -104,10 +104,10 @@ func newQueue(
 	}
 
 	if name == "" {
-		name = "MQueue #" + id.String()
+		name = "mQueue #" + id.String()
 	}
 
-	q := MQueue{
+	q := mQueue{
 		id:         id,
 		name:       name,
 		messages:   make([]*MsgEnvelope, 0),
@@ -125,14 +125,14 @@ func newQueue(
 }
 
 // Stop stops the message registration cycle.
-func (q *MQueue) Stop() {
+func (q *mQueue) Stop() {
 	close(q.stopCh)
 }
 
 // PutMessages puts messages into the queue q.
 //
 // if there are no messages then error will be returned.
-func (q *MQueue) PutMessages(sender uuid.UUID, msgs ...*Message) chan error {
+func (q *mQueue) PutMessages(sender uuid.UUID, msgs ...*Message) chan error {
 
 	resChan := make(chan error, 1)
 
@@ -153,7 +153,7 @@ func (q *MQueue) PutMessages(sender uuid.UUID, msgs ...*Message) chan error {
 		return resChan
 	}
 
-	go func(sender uuid.UUID, msgs []*Message) {
+	go func() {
 		for _, m := range msgs {
 			m := m
 			q.regCh <- msgRegRequest{sender: sender, msg: *m}
@@ -165,13 +165,13 @@ func (q *MQueue) PutMessages(sender uuid.UUID, msgs ...*Message) chan error {
 
 		close(resChan)
 
-	}(sender, msgs)
+	}()
 
 	return resChan
 }
 
 // GetMessages returns a slice of messageEnvelopes
-func (q *MQueue) GetMessages(
+func (q *mQueue) GetMessages(
 	reciever uuid.UUID,
 	fromBegin bool) ([]MsgEnvelope, error) {
 

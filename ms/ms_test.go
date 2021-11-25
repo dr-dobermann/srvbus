@@ -31,11 +31,11 @@ func TestMSrv(t *testing.T) {
 		{key: "key1", val: "Hello Dober!"},
 		{key: "key2", val: "Hello again Dober!"}}
 
-	errc := ms.PutMessages(
+	err = ms.PutMessages(
+		uuid.New(),
 		qm,
 		GetMsg(uuid.Nil, mm[0].key, bytes.NewBufferString(mm[0].val)),
 		GetMsg(uuid.Nil, mm[1].key, bytes.NewBufferString(mm[0].val)))
-	is.True(errc != nil)
 
-	is.NoErr(<-errc)
+	is.NoErr(err)
 }
