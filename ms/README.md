@@ -1,8 +1,8 @@
-**ms** is a simply in-memory message server.
+**ms** is a simply in-memory Message Server.
 
 # Introduction
 
-**ms** is a part of `srvbus` package - a part of the complex project [gobpm](https://github.com/dr-dobermann/gobpm) -- the BPMN v2. compliant run-time engine on Go. 
+**ms** is a part of `srvbus` package - the Service Provider of the complex project [gobpm](https://github.com/dr-dobermann/gobpm) -- the BPMN v2. compliant run-time engine on Go. 
 
 **Message Server** (ms) is designed to use in a cooperation with the **Event Server** (es) and the **Service Server** (s2), but it could be used separately in case there is only a necessity of the queued messages interchange.
 
@@ -12,19 +12,19 @@ For logging Message Server uses [Uber zap logger](https://github.com/uber-go/zap
 
 The Message Server has a very simple API. To create a new Message Server just call `New` function of the package `ms`. It takes context, server id, its name and pointer to the sugared zap logger.
 
-if logger isn't presented then error would be returned. If id or name weren't given, they will be created autonomically.
+if logger isn't presented then error would be returned. If id or name weren't given, they will be created automatically.
 
-After server was created its possible to Put messages into it and Get messages out of it.
+After the server is created its possible to Put messages into it and Get messages out of it.
 
 ## Putting messages to the server
 
-To put messages `PutMessages` method of MessageServer should be invoced. Current realization doesn't provide direct queues management. When messages are putting into the server, the name of queue should be given. If there is no queue with given name, then a new queue will be created. When messages are putting into the queue, the sender id of these messages should be provided.
+To put messages `PutMessages` method of MessageServer should be invoked. Current realization doesn't provide direct queues management. When messages are putting into the server, the name of queue should be given. If there is no queue with the given name, then the new queue will be created. When messages are putting into the queue, the sender id of these messages should be provided.
 
-`PutMessages` consumes variadic number of Messages and all of them are storing into the same queue in the FIFO order. 
+`PutMessages` consumes variadic number of messages and all of them are storing into the same queue in the FIFO order. 
 
 ## Getting messages from the server
 
-To get saved on the Message Server messages, `GetMessages` method should be invoced. This method returns a list of `MessageEnvelopes` which consists among the Message itself also time of it registration on the Server and the ID of the Message Sender. 
+To get saved on the Message Server messages, `GetMessages` method should be called. This method returns a list of `MessageEnvelopes` which consists among the Message itself also time of it registration on the Server and the ID of the message sender. 
 
 `GetMessages` demands the receiver ID, and the queue name. If there were previous reading from the same queue and for the same receiver, then only new messages would be returned. To read queue from the start,
 the third parameter `fromBegin` shold be set to `true`.
@@ -39,16 +39,17 @@ In the present moment I don't see any neccessity to provide a queue's restarting
 
 ## Stopping the server
 
-To stop the Message Server user should invoke `cancel` function of the contextx. Server stops processing all registered queues.
+To stop the Message Server user should invoke `cancel` function of the context. Server stops processing of all the registered queues.
 
 ## Message
 
-Messages only has two fields
+Messages only has three fields
   
-  Message struct {
+    Message struct {
+      id  uuid.UUID
       Key string
       data []bytes
-  }
+    }
 
 The maximum size of data couldn't exceed 8K bytes (8192 bytes). 
 
