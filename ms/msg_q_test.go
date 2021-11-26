@@ -2,6 +2,7 @@ package ms
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -64,10 +65,13 @@ func TestQueue(t *testing.T) {
 			is.Equal(q2.Name(), "mQueue #"+qid.String())
 		})
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// testing of putting messages into the queue
 	t.Run("empty msg list",
 		func(t *testing.T) {
-			if err = <-q.PutMessages(uuid.New(), []*Message{}...); err == nil {
+			if err = q.putMessages(ctx, uuid.New(), []*Message{}...); err == nil {
 				t.Error("put empty messages list")
 			}
 		})
@@ -78,19 +82,17 @@ func TestQueue(t *testing.T) {
 			GetMsg(uuid.Nil, m.key, bytes.NewBufferString(m.value)))
 	}
 
-	err = <-q.PutMessages(uuid.New(), msgs...)
+	err = q.putMessages(ctx, uuid.New(), msgs...)
 	is.NoErr(err)
-
-	is.Equal(q.Count(), 2)
 
 	// testing of getting messages from the queue
 	t.Run("empty_reciever", func(t *testing.T) {
-		_, err := q.GetMessages(uuid.Nil, false)
+		_, err := q.getMessages(ctx, uuid.Nil, false)
 		is.True(err != nil)
 	})
 
 	recieverID := uuid.New()
-	mes, err := q.GetMessages(recieverID, false)
+	mes, err := q.getMessages(ctx, recieverID, false)
 	is.NoErr(err)
 	is.Equal(len(mes), 2)
 
@@ -100,12 +102,12 @@ func TestQueue(t *testing.T) {
 	}
 
 	// trying to read new messages
-	mes, err = q.GetMessages(recieverID, false)
+	mes, err = q.getMessages(ctx, recieverID, false)
 	is.NoErr(err)
 	is.Equal(len(mes), 0)
 
 	// rereading messages from the begin
-	mes, err = q.GetMessages(recieverID, true)
+	mes, err = q.getMessages(ctx, recieverID, true)
 	is.NoErr(err)
 	is.Equal(len(mes), 2)
 }

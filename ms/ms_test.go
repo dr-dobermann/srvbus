@@ -26,16 +26,46 @@ func TestMSrv(t *testing.T) {
 	is.NoErr(err)
 	is.True(ms != nil)
 
-	qm := "test_queue"
+	qn := "test_queue"
 	mm := []struct{ key, val string }{
 		{key: "key1", val: "Hello Dober!"},
 		{key: "key2", val: "Hello again Dober!"}}
 
+	// put messages to the server
 	err = ms.PutMessages(
 		uuid.New(),
-		qm,
-		GetMsg(uuid.Nil, mm[0].key, bytes.NewBufferString(mm[0].val)),
-		GetMsg(uuid.Nil, mm[1].key, bytes.NewBufferString(mm[0].val)))
+		qn,
+		func() (msgs []*Message) {
+			for _, m := range mm {
+				msgs = append(msgs,
+					GetMsg(
+						uuid.Nil,
+						m.key,
+						bytes.NewBufferString(m.val)))
+			}
 
+			return
+		}()...)
 	is.NoErr(err)
+
+	// get messages from the non-existing queue
+	mes, err := ms.GetMessages(uuid.New(), "non-existed_queue", false)
+	is.True(err != nil)
+	is.True(mes == nil)
+
+	// get messages from the server
+	mes, err = ms.GetMessages(uuid.New(), qn, false)
+	is.NoErr(err)
+	is.Equal(len(mes), 2)
+
+	for i, m := range mes {
+		is.Equal(mm[i].key, m.Key)
+		is.True(bytes.Equal([]byte(mm[i].val), m.Data()))
+	}
+
+	// get queue stats
+	qs := ms.Queues()
+	is.Equal(len(qs), 1)
+	is.Equal(qs[0].Name, qn)
+	is.Equal(qs[0].MCount, len(mm))
 }

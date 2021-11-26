@@ -3,6 +3,7 @@ package ms
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -13,12 +14,35 @@ import (
 
 // MessageServer holds all the Message Server data.
 type MessageServer struct {
+	sync.Mutex
+
 	id   uuid.UUID
 	Name string
 	log  *zap.SugaredLogger
 	ctx  context.Context
 
 	queues map[string]*mQueue
+}
+
+// QueueStat represent the statistics for a single queue.
+type QueueStat struct {
+	Name   string
+	MCount int
+}
+
+// Queues returns a list of queues on the server
+func (mSrv *MessageServer) Queues() []QueueStat {
+
+	mSrv.Lock()
+	defer mSrv.Unlock()
+
+	ql := []QueueStat{}
+
+	for n, q := range mSrv.queues {
+		ql = append(ql, QueueStat{n, q.count()})
+	}
+
+	return ql
 }
 
 // New creates a new Message Server and returns its pointer.
@@ -67,15 +91,42 @@ func (mSrv *MessageServer) PutMessages(
 		return fmt.Errorf("empty queue name for messages putting")
 	}
 
-	q, ok := mSrv.queues[queue]
+	mSrv.Lock()
+	defer mSrv.Unlock()
+
+	_, ok := mSrv.queues[queue]
 	if !ok {
-		var err error
-		q, err = newQueue(uuid.New(), queue, mSrv.log)
+		q, err := newQueue(uuid.New(), queue, mSrv.log)
 		if err != nil {
 			return fmt.Errorf("put messages failde : %w", err)
 		}
+
 		mSrv.queues[queue] = q
 	}
 
-	return <-q.PutMessages(sender, msgs...)
+	q := mSrv.queues[queue]
+
+	if !q.isActive() {
+		return fmt.Errorf("couldn't put messages into stopped queue %s",
+			q.Name())
+	}
+
+	return q.putMessages(mSrv.ctx, sender, msgs...)
+}
+
+func (mSrv *MessageServer) GetMessages(
+	receiver uuid.UUID,
+	queue string,
+	fromBegin bool) ([]MessageEnvelope, error) {
+
+	q, ok := mSrv.queues[queue]
+	if !ok {
+		mSrv.log.Errorw("no queue", "queue", queue)
+
+		return nil,
+			fmt.Errorf("queue '%s' isn't found on the server '%s'",
+				queue, mSrv.Name)
+	}
+
+	return q.getMessages(mSrv.ctx, receiver, fromBegin)
 }
