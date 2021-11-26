@@ -9,16 +9,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// =============================================================================
-
 // MessageEnvelope holds the Message itself and the time when it was added
 // to the queue and the Sender id who sent the Message into the queue.
 type MessageEnvelope struct {
 	Message
 
 	Registered time.Time
-	sender     uuid.UUID
-	queue      *mQueue
+	Sender     uuid.UUID
 }
 
 // msgRegRequest is used for message registration on server.
@@ -27,9 +24,9 @@ type msgRegRequest struct {
 	msg    *Message
 }
 
-// QueueMessagesRequest consist a single request for return
+// queueMessagesRequest consist a single request for return
 // messages to the receiver.
-type QueueMessagesRequest struct {
+type queueMessagesRequest struct {
 	receiver  uuid.UUID
 	fromBegin bool
 	messages  chan MessageEnvelope
@@ -54,7 +51,7 @@ type mQueue struct {
 	stopCh chan struct{}
 
 	// messages return channel
-	mReqCh chan QueueMessagesRequest
+	mReqCh chan queueMessagesRequest
 
 	// queue's messages number request channnel
 	mCntCh chan int
@@ -89,7 +86,13 @@ func (q mQueue) Name() string {
 	return q.name
 }
 
-// regLoop gets message registration request from user q.putMessages
+// loop porcesses:
+//   messages registration requests,
+//   stop event
+//   messages reading requests.
+//
+// loop also returns the cureent count of messages
+// in the queue.
 func (q *mQueue) loop() {
 	for {
 		select {
@@ -108,8 +111,7 @@ func (q *mQueue) loop() {
 			me := new(MessageEnvelope)
 			me.Message = *mrr.msg
 			me.Registered = time.Now()
-			me.sender = mrr.sender
-			me.queue = q
+			me.Sender = mrr.sender
 
 			q.messages = append(q.messages, me)
 
@@ -160,7 +162,9 @@ func (q *mQueue) loop() {
 
 // newQueue creates a new queue and returns a pointer on it.
 //
-// if there's nil logger given, error will be returned
+// if there's nil logger given, error will be returned.
+//
+// newQueue runs the queue processing loop.
 func newQueue(
 	id uuid.UUID,
 	name string,
@@ -186,10 +190,10 @@ func newQueue(
 		log:        log,
 		regCh:      make(chan msgRegRequest),
 		stopCh:     make(chan struct{}),
-		mReqCh:     make(chan QueueMessagesRequest),
+		mReqCh:     make(chan queueMessagesRequest),
 		mCntCh:     make(chan int)}
 
-	// start message registration procedure
+	// start processing loop
 	go q.loop()
 
 	log.Debugw("new message queue is created", "name", q.name, "id", q.id)
@@ -198,7 +202,9 @@ func newQueue(
 }
 
 // Stop stops the message registration cycle.
-func (q *mQueue) Stop() {
+func (q *mQueue) stop() {
+	q.log.Infow("message stop", "queue", q.name)
+
 	close(q.stopCh)
 }
 
@@ -240,6 +246,8 @@ func (q *mQueue) putMessages(
 		case <-ctx.Done():
 			close(q.stopCh)
 
+			q.log.Error("context stopped for putting messages")
+
 			return fmt.Errorf("put messages interrupted by context : %w",
 				ctx.Err())
 
@@ -272,6 +280,7 @@ func (q *mQueue) getMessages(
 
 	if receiver == uuid.Nil {
 		q.log.Errorw("receiver of messages isn't set", "queue", q.name)
+
 		return nil,
 			fmt.Errorf("receiver of message isn't set for queue %s", q.name)
 	}
@@ -279,7 +288,12 @@ func (q *mQueue) getMessages(
 	mes := []MessageEnvelope{}
 
 	messages := make(chan MessageEnvelope)
-	q.mReqCh <- QueueMessagesRequest{receiver, fromBegin, messages}
+	q.mReqCh <- queueMessagesRequest{receiver, fromBegin, messages}
+
+	q.log.Debugw("start reading messages",
+		"receiver", receiver,
+		"queue", q.name,
+		"from begin", fromBegin)
 
 	for {
 		select {
@@ -291,8 +305,19 @@ func (q *mQueue) getMessages(
 
 		case me, ok := <-messages:
 			if !ok {
+				q.log.Debugw("stop reading messages",
+					"receiver", receiver,
+					"queue", q.name,
+					"count", len(mes))
+
 				return mes, nil
 			}
+			q.log.Debugw("read message",
+				"receiver", receiver,
+				"queue", q.name,
+				"msg ID", me.id,
+				"msd Key", me.Key)
+
 			mes = append(mes, me)
 		}
 	}

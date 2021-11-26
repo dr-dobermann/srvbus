@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// =============================================================================
 // Message represent the single message on the server
 type Message struct {
 	id     uuid.UUID

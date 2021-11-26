@@ -110,4 +110,9 @@ func TestQueue(t *testing.T) {
 	mes, err = q.getMessages(ctx, recieverID, true)
 	is.NoErr(err)
 	is.Equal(len(mes), 2)
+
+	// stop queue processing
+	q.stop()
+	is.True(!q.isActive())
+
 }

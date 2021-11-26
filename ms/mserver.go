@@ -9,10 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// =============================================================================
-// Message Server
-
-// MessageServer holds all the Message Server data.
+/// MessageServer holds all the Message Server data.
 type MessageServer struct {
 	sync.Mutex
 
@@ -22,6 +19,16 @@ type MessageServer struct {
 	ctx  context.Context
 
 	queues map[string]*mQueue
+
+	runned bool
+}
+
+// IsRunned returns the current running state of the MessageServer.
+func (mSrv *MessageServer) IsRunned() bool {
+	mSrv.Lock()
+	defer mSrv.Unlock()
+
+	return mSrv.runned
 }
 
 // QueueStat represent the statistics for a single queue.
@@ -32,7 +39,6 @@ type QueueStat struct {
 
 // Queues returns a list of queues on the server
 func (mSrv *MessageServer) Queues() []QueueStat {
-
 	mSrv.Lock()
 	defer mSrv.Unlock()
 
@@ -46,6 +52,9 @@ func (mSrv *MessageServer) Queues() []QueueStat {
 }
 
 // New creates a new Message Server and returns its pointer.
+//
+// New starts internal go-routine to catch ctx.Done() signal
+// and stops the server.
 func New(
 	ctx context.Context,
 	id uuid.UUID,
@@ -70,6 +79,23 @@ func New(
 		log:    log,
 		ctx:    ctx,
 		queues: make(map[string]*mQueue)}
+
+	log.Debugw("Message Server created",
+		"name", ms.Name,
+		"id", ms.id)
+
+	go func() {
+		<-ms.ctx.Done()
+
+		ms.Lock()
+		defer ms.Unlock()
+
+		for _, q := range ms.queues {
+			q.stop()
+		}
+
+		ms.runned = false
+	}()
 
 	return ms, nil
 }
@@ -98,6 +124,10 @@ func (mSrv *MessageServer) PutMessages(
 	if !ok {
 		q, err := newQueue(uuid.New(), queue, mSrv.log)
 		if err != nil {
+			mSrv.log.Errorw("couldn't put messages",
+				"queue", queue,
+				"err", err.Error())
+
 			return fmt.Errorf("put messages failde : %w", err)
 		}
 
@@ -106,14 +136,18 @@ func (mSrv *MessageServer) PutMessages(
 
 	q := mSrv.queues[queue]
 
-	if !q.isActive() {
-		return fmt.Errorf("couldn't put messages into stopped queue %s",
-			q.Name())
-	}
+	mSrv.log.Debugw("putting messages", "queue", q.name)
 
 	return q.putMessages(mSrv.ctx, sender, msgs...)
 }
 
+// GetMessages reads all new messages form the queue and returns
+// slice of their MessageEnvelopes.
+//
+// Receiver mustn't be nil and the queue should be on the server of
+// error would be returned.
+//
+// If fromBegin is true, then all messages would be readed from the queue.
 func (mSrv *MessageServer) GetMessages(
 	receiver uuid.UUID,
 	queue string,
@@ -127,6 +161,8 @@ func (mSrv *MessageServer) GetMessages(
 			fmt.Errorf("queue '%s' isn't found on the server '%s'",
 				queue, mSrv.Name)
 	}
+
+	mSrv.log.Debugw("getting messages", "queue", q.name)
 
 	return q.getMessages(mSrv.ctx, receiver, fromBegin)
 }

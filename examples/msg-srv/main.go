@@ -1,52 +1,55 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/dr-dobermann/srvbus/msgsrv"
+	"github.com/dr-dobermann/srvbus/ms"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 func main() {
-	ms := msgsrv.NewMessageServer("myserver")
-	if ms == nil {
+	log, err := zap.NewDevelopment()
+	if err != nil {
+		panic("couldn't get a logger :" + err.Error())
+	}
+
+	ctx, cancel := context.WithDeadline(
+		context.Background(),
+		time.Now().Add(20*time.Second))
+	defer cancel()
+
+	mSrv, err := ms.New(ctx, uuid.New(), "myserver", log.Sugar())
+	if mSrv == nil || err != nil {
 		panic("couldn't create a message server")
 	}
 
 	qn := "msg_queue"
-	// trying to retrieve message
-	go func() {
-		for {
-			if ms.HasQueue(qn) {
-				break
-			}
-			fmt.Println("no queue", qn, "on server", ms.Name, ". Wait...")
-			time.Sleep(100 * time.Millisecond)
-		}
 
-		mm, err := ms.GetMesages(qn)
-		if err != nil {
-			panic(fmt.Sprintf("couldn't retrieve messages "+
-				"from queue %s on server %s : %v",
-				qn, ms.Name, err))
-		}
-		for _, m := range mm {
-			dat := m.Data()
-			fmt.Printf("Got message :\n  registered at: %v\n"+
-				"  key: %s\n  value: %v (%s)\n", m.RegTime, m.Key, dat, string(dat))
-		}
-	}()
+	if err = mSrv.PutMessages(
+		uuid.New(),
+		qn,
+		ms.GetMsg(
+			uuid.Nil,
+			"greetings",
+			strings.NewReader("Hello Dober!"))); err != nil {
 
-	// write message to server
-	time.AfterFunc(
-		1*time.Second,
-		func() {
-			fmt.Println("Putting message")
-			ms.PutMessages(qn, *msgsrv.MustGetMsg("greetings", strings.NewReader("Hello Dober!")))
-		})
+		panic("couldn't store messages : " + err.Error())
+	}
 
-	fmt.Println("Closing...")
+	mes, err := mSrv.GetMessages(uuid.New(), qn, false)
+	if err != nil {
+		panic("coudln't read a messages : " + err.Error())
+	}
 
-	time.Sleep(2 * time.Second)
+	for i, m := range mes {
+		fmt.Println("#", i+1, "msg has key:'", m.Key,
+			"' and data:[", string(m.Data()),
+			"] received at", m.Registered,
+			"from", m.Sender)
+	}
+
 }
