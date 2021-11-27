@@ -26,7 +26,8 @@ linters:
     fast: false
     enable-all: true
     disable:
-        - varnamelen
+        - goerr113 # Use static errors instead dynamic ones
+        - varnamelen # Variable name is too short for the scope
         - interfacer # The linter 'interfacer' is deprecated
         - maligned # The linter 'maligned' is deprecated
         - scopelint # The linter 'scopelint' is deprecated Replaced by exportloopref.

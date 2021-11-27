@@ -93,6 +93,8 @@ func (q mQueue) Name() string {
 //
 // loop also returns the cureent count of messages
 // in the queue.
+//
+//nolint:cyclop
 func (q *mQueue) loop() {
 	for {
 		select {
@@ -154,8 +156,8 @@ func (q *mQueue) loop() {
 
 			q.lastReaded[mReq.receiver] = from + len(mes)
 
-		case q.mCntCh <- q.cnt:
-			// send current messages count
+		case q.mCntCh <- q.cnt: // send current messages count
+			continue
 		}
 	}
 }
@@ -169,7 +171,6 @@ func newQueue(
 	id uuid.UUID,
 	name string,
 	log *zap.SugaredLogger) (*mQueue, error) {
-
 	if log == nil {
 		return nil, fmt.Errorf("nil logger given for queue %s", name)
 	}
@@ -215,14 +216,12 @@ func (q *mQueue) putMessages(
 	ctx context.Context,
 	sender uuid.UUID,
 	msgs ...*Message) error {
-
 	if !q.isActive() {
 		q.log.Errorw("queue isn't processing requests",
 			"queue", q.name)
 
 		return fmt.Errorf("couldn't put messages into stopped queue %s",
 			q.name)
-
 	}
 
 	if len(msgs) == 0 {
@@ -231,7 +230,6 @@ func (q *mQueue) putMessages(
 
 		return fmt.Errorf("couldn't put an empty messages "+
 			"list into queue %s", q.name)
-
 	}
 
 	if sender == uuid.Nil {
@@ -267,7 +265,6 @@ func (q *mQueue) getMessages(
 	ctx context.Context,
 	receiver uuid.UUID,
 	fromBegin bool) ([]MessageEnvelope, error) {
-
 	if !q.isActive() {
 		q.log.Errorw("queue isn't processing requests",
 			"queue", q.name)
@@ -275,7 +272,6 @@ func (q *mQueue) getMessages(
 		return nil,
 			fmt.Errorf("couldn't get messages from the stopped queue %s",
 				q.name)
-
 	}
 
 	if receiver == uuid.Nil {
@@ -299,6 +295,7 @@ func (q *mQueue) getMessages(
 		select {
 		case <-ctx.Done():
 			close(q.stopCh)
+
 			return nil,
 				fmt.Errorf("message getting closed by context : %w",
 					ctx.Err())
@@ -312,6 +309,7 @@ func (q *mQueue) getMessages(
 
 				return mes, nil
 			}
+
 			q.log.Debugw("read message",
 				"receiver", receiver,
 				"queue", q.name,

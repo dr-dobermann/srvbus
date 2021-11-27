@@ -60,7 +60,6 @@ func New(
 	id uuid.UUID,
 	name string,
 	log *zap.SugaredLogger) (*MessageServer, error) {
-
 	if log == nil {
 		return nil, fmt.Errorf("logger isn't present")
 	}
@@ -106,13 +105,12 @@ func New(
 //
 // if the queue isn't present on the server the new one queue will be
 // created and added to the server.
-// if some error occured during the queue creation, the error will be
+// if some error occurred during the queue creation, the error will be
 // returned.
 func (mSrv *MessageServer) PutMessages(
 	sender uuid.UUID,
 	queue string,
 	msgs ...*Message) error {
-
 	if queue == "" {
 		return fmt.Errorf("empty queue name for messages putting")
 	}
@@ -152,7 +150,6 @@ func (mSrv *MessageServer) GetMessages(
 	receiver uuid.UUID,
 	queue string,
 	fromBegin bool) ([]MessageEnvelope, error) {
-
 	q, ok := mSrv.queues[queue]
 	if !ok {
 		mSrv.log.Errorw("no queue", "queue", queue)

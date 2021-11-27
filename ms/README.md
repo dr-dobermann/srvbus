@@ -51,6 +51,8 @@ Messages only has three fields
       data []bytes
     }
 
+Method `ID` returns an Id of the Message
+
 The maximum size of data couldn't exceed 8K bytes (8192 bytes). 
 
 There are two functions for creating Message object:

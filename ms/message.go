@@ -1,6 +1,7 @@
 package ms
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -54,19 +55,24 @@ func (m *Message) Copy() *Message {
 
 // NewMsg creates an Message with Key key and Data data and returns the pointer
 // to it.
-
+//
 // if the data is more than 8k, then error will be returned.
+//
+//nolint:revive
 func NewMsg(id uuid.UUID, key string, r io.Reader) (*Message, error) {
 	if id == uuid.Nil {
 		id = uuid.New()
 	}
 
 	buf, err := ioutil.ReadAll(r)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("message %s creation : %w", key, err)
 	}
 
-	const maxMsgDataLen = 8 * (1 << 10) // 8kbytes
+	const (
+		kBytes        = 1 << 10
+		maxMsgDataLen = 8 * kBytes // 8kbytes
+	)
 
 	if len(buf) > maxMsgDataLen {
 		return nil, fmt.Errorf("message %s is too large :%d ", key, len(buf))
