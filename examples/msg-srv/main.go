@@ -22,10 +22,12 @@ func main() {
 		time.Now().Add(20*time.Second))
 	defer cancel()
 
-	mSrv, err := ms.New(ctx, uuid.New(), "myserver", log.Sugar())
+	mSrv, err := ms.New(uuid.New(), "myserver", log.Sugar())
 	if mSrv == nil || err != nil {
 		panic("couldn't create a message server")
 	}
+
+	mSrv.Run(ctx)
 
 	qn := "msg_queue"
 

@@ -10,9 +10,13 @@ For logging Message Server uses [Uber zap logger](https://github.com/uber-go/zap
 
 ## Running the Message Server
 
-The Message Server has a very simple API. To create a new Message Server just call `New` function of the package `ms`. It takes context, server id, its name and pointer to the sugared zap logger.
+The Message Server has a very simple API. To create a new Message Server just call `New` function of the package `ms`. It takes server id, its name and pointer to the sugared zap logger.
 
 if logger isn't presented then error would be returned. If id or name weren't given, they will be created automatically.
+
+Once the server is created it should be run with `Run` method with appropriate context. Run checks if the server is already runned. If so it's just returns back.
+
+In case the Server is stopped early, all the queues created in the previous session will be deleted before new run.
 
 After the server is created its possible to Put messages into it and Get messages out of it.
 

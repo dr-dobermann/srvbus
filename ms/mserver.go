@@ -1,3 +1,19 @@
+// srvBus is a Service Providing Server developed to
+// support project GoBPM.
+//
+// (c) 2021, Ruslan Gabitov a.k.a. dr-dobermann.
+// Use of this source is governed by LGPL license that
+// can be found in the LICENSE file.
+
+/*
+Package ms is a part of srvbus package. It consists of the
+Message Server implementation.
+
+Message Server provides simple in-memory queued messages interchange
+server.
+
+It could be used separately of the rest of the srvbus packages.
+*/
 package ms
 
 import (
@@ -16,11 +32,10 @@ type MessageServer struct {
 	id   uuid.UUID
 	Name string
 	log  *zap.SugaredLogger
-	ctx  context.Context
 
 	queues map[string]*mQueue
 
-	runned bool
+	ctxCh chan context.Context
 }
 
 // IsRunned returns the current running state of the MessageServer.
@@ -28,7 +43,13 @@ func (mSrv *MessageServer) IsRunned() bool {
 	mSrv.Lock()
 	defer mSrv.Unlock()
 
-	return mSrv.runned
+	if mSrv.ctxCh == nil {
+		return false
+	}
+
+	_, ok := <-mSrv.ctxCh
+
+	return ok
 }
 
 // QueueStat represent the statistics for a single queue.
@@ -56,7 +77,6 @@ func (mSrv *MessageServer) Queues() []QueueStat {
 // New starts internal go-routine to catch ctx.Done() signal
 // and stops the server.
 func New(
-	ctx context.Context,
 	id uuid.UUID,
 	name string,
 	log *zap.SugaredLogger) (*MessageServer, error) {
@@ -76,27 +96,63 @@ func New(
 		id:     id,
 		Name:   name,
 		log:    log,
-		ctx:    ctx,
 		queues: make(map[string]*mQueue)}
 
 	log.Debugw("Message Server created",
 		"name", ms.Name,
 		"id", ms.id)
 
-	go func() {
-		<-ms.ctx.Done()
-
-		ms.Lock()
-		defer ms.Unlock()
-
-		for _, q := range ms.queues {
-			q.stop()
-		}
-
-		ms.runned = false
-	}()
-
 	return ms, nil
+}
+
+// Run starts the Message Server if it isn't started.
+func (mSrv *MessageServer) Run(ctx context.Context) {
+	if mSrv.IsRunned() {
+		mSrv.log.Infow("alredy runned",
+			"id", mSrv.id,
+			"name", mSrv.Name)
+
+		return
+	}
+
+	// in case of restarting the Message Server
+	// all old queues should be deleted
+	if mSrv.ctxCh != nil {
+		mSrv.Lock()
+		mSrv.queues = map[string]*mQueue{}
+		mSrv.Unlock()
+	}
+
+	mSrv.log.Infow("message server started",
+		"id", mSrv.id,
+		"name", mSrv.Name)
+
+	mSrv.ctxCh = make(chan context.Context)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				mSrv.Lock()
+				defer mSrv.Unlock()
+
+				for _, q := range mSrv.queues {
+					q.stop()
+				}
+
+				close(mSrv.ctxCh)
+
+				mSrv.log.Infow("message server stopped",
+					"id", mSrv.id,
+					"name", mSrv.Name)
+
+			// put an actual context into the channel for
+			// the put and get messages functions and to
+			// indicate the Server is running.
+			case mSrv.ctxCh <- ctx:
+			}
+		}
+	}()
 }
 
 // PutMessages inserts messages into the queue.
@@ -115,10 +171,20 @@ func (mSrv *MessageServer) PutMessages(
 		return fmt.Errorf("empty queue name for messages putting")
 	}
 
+	// check if the server is ruuning
+	if mSrv.ctxCh == nil {
+		return fmt.Errorf("server isn't runned")
+	}
+
+	ctx, ok := <-mSrv.ctxCh
+	if !ok {
+		return fmt.Errorf("server isn't runned")
+	}
+
 	mSrv.Lock()
 	defer mSrv.Unlock()
 
-	_, ok := mSrv.queues[queue]
+	_, ok = mSrv.queues[queue]
 	if !ok {
 		q, err := newQueue(uuid.New(), queue, mSrv.log)
 		if err != nil {
@@ -136,7 +202,7 @@ func (mSrv *MessageServer) PutMessages(
 
 	mSrv.log.Debugw("putting messages", "queue", q.name)
 
-	return q.putMessages(mSrv.ctx, sender, msgs...)
+	return q.putMessages(ctx, sender, msgs...)
 }
 
 // GetMessages reads all new messages form the queue and returns
@@ -159,7 +225,17 @@ func (mSrv *MessageServer) GetMessages(
 				queue, mSrv.Name)
 	}
 
+	// check if the server is ruuning
+	if mSrv.ctxCh == nil {
+		return nil, fmt.Errorf("server isn't runned")
+	}
+
+	ctx, ok := <-mSrv.ctxCh
+	if !ok {
+		return nil, fmt.Errorf("server isn't runned")
+	}
+
 	mSrv.log.Debugw("getting messages", "queue", q.name)
 
-	return q.getMessages(mSrv.ctx, receiver, fromBegin)
+	return q.getMessages(ctx, receiver, fromBegin)
 }

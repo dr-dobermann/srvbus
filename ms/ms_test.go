@@ -22,9 +22,11 @@ func TestMSrv(t *testing.T) {
 	defer cancel()
 
 	const msn = "test_mserver"
-	ms, err := New(ctx, uuid.Nil, msn, sugar)
+	ms, err := New(uuid.Nil, msn, sugar)
 	is.NoErr(err)
 	is.True(ms != nil)
+
+	ms.Run(ctx)
 
 	qn := "test_queue"
 	mm := []struct{ key, val string }{
