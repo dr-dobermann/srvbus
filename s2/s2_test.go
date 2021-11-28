@@ -74,6 +74,8 @@ func TestSvcServer(t *testing.T) {
 	is.NoErr(err)
 	is.True(id != uuid.Nil)
 
+	fmt.Println(sSrv.Stat().String())
+
 	err = sSrv.ExecService(id)
 	is.NoErr(err)
 
@@ -104,4 +106,7 @@ func TestSvcServer(t *testing.T) {
 	is.Equal(output.String(), strings.Join(testStr, ""))
 
 	fmt.Println(output.String())
+
+	fmt.Println(sSrv.Stat().String())
+
 }

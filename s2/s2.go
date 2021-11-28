@@ -17,6 +17,8 @@ package s2
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -402,4 +404,71 @@ func (sSrv *ServiceServer) WaitForService(
 	}()
 
 	return resChan
+}
+
+// S2Stat consists the Service Server status returned by Stat mehtod.
+type S2Stat struct {
+	Name     string
+	ID       uuid.UUID
+	Active   bool
+	Services int
+	Splits   map[string]Info
+}
+
+// String implements the fmt.Stringer interface and
+// returns the string representation of the S2Stat
+func (stat S2Stat) String() string {
+	res := "\nService Server\n" +
+		"======================================\n" +
+		"Name          : " + stat.Name + "\n" +
+		"ID            : " + stat.ID.String() + "\n"
+
+	if stat.Active {
+		res += "Status        : Active\n"
+	} else {
+		res += "Status        : Inactive\n"
+	}
+	res += "Total Services: " + strconv.Itoa(stat.Services) + "\n"
+
+	res += "======================================\n"
+
+	for st, info := range stat.Splits {
+		res += "  [" + st + "] " + info.Svcs[0] + "\n"
+		for _, s := range info.Svcs[1:] {
+			res += strings.Repeat(" ", len(st)+5) + s + "\n"
+		}
+	}
+
+	res += "\n"
+
+	return res
+}
+
+// Info holds information about services with the same state
+type Info struct {
+	Num  int
+	Svcs []string
+}
+
+func (sSrv *ServiceServer) Stat() S2Stat {
+	stat := new(S2Stat)
+	stat.Splits = make(map[string]Info)
+
+	sSrv.Lock()
+	defer sSrv.Unlock()
+
+	stat.Active = sSrv.svcResCh != nil
+	stat.Name = sSrv.Name
+	stat.ID = sSrv.ID
+
+	for _, sr := range sSrv.services {
+		stat.Services++
+
+		info := stat.Splits[sr.state.String()]
+		info.Num++
+		info.Svcs = append(info.Svcs, sr.id.String()+" : "+sr.name)
+		stat.Splits[sr.state.String()] = info
+	}
+
+	return *stat
 }
