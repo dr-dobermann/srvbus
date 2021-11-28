@@ -4,7 +4,7 @@
 // (c) 2021, Ruslan Gabitov a.k.a. dr-dobermann.
 // Use of this source is governed by LGPL license that
 // can be found in the LICENSE file.
-
+//
 /*
 Package s2 is a part of the srvbus package. s2 consists of the
 in-memory Service Server implementation.
@@ -96,7 +96,6 @@ func New(
 	id uuid.UUID,
 	name string,
 	log *zap.SugaredLogger) (*ServiceServer, error) {
-
 	if log == nil {
 		return nil, fmt.Errorf("logger isn't presented")
 	}
@@ -193,7 +192,6 @@ func (sSrv *ServiceServer) regSvcState(ctx context.Context) {
 				"service ID", id)
 		}
 	}
-
 }
 
 // loop executes main processing loop of the Service Server.
@@ -202,6 +200,7 @@ func (sSrv *ServiceServer) regSvcState(ctx context.Context) {
 func (sSrv *ServiceServer) loop(ctx context.Context) {
 	sSrv.log.Debugw("service server operation loop started",
 		"srvID", sSrv.ID)
+
 	for {
 		// check if context cancelled
 		select {
@@ -209,16 +208,19 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 			sSrv.log.Debugw("server stopped",
 				"id", sSrv.ID,
 				"name", sSrv.Name)
+
 			return
 
 		default:
 		}
 
 		sSrv.Lock()
+
 		for id, sr := range sSrv.services {
 			sr := sr
 			if sr.state == SSReady {
 				sr.state = SSRunning
+
 				go func() {
 					sSrv.log.Debugw("service started",
 						"srvID", sSrv.ID,
@@ -268,7 +270,6 @@ func (sSrv *ServiceServer) Run(ctx context.Context) error {
 func (sSrv *ServiceServer) AddService(
 	name string,
 	s ServiceRunner) (uuid.UUID, error) {
-
 	if s == nil {
 		return uuid.Nil, fmt.Errorf("couldn't register nil-service")
 	}
@@ -324,21 +325,81 @@ func (sSrv *ServiceServer) ExecService(id uuid.UUID) error {
 	return nil
 }
 
-// IsSvcFinished returns true if the Service state is SSEnded or SSFailed.
+// WaitForService waits for finalization one or all Serives on
+// the Server.
 //
-// If there is no Service with given id, false will be returned.
-func (sSrv *ServiceServer) IsSvcFinished(id uuid.UUID) bool {
-	sSrv.Lock()
-	defer sSrv.Unlock()
+// If id is uuid.Nil then it waits for finalization of all Services on the
+// Server.
+//nolint:gocognit, cyclop
+func (sSrv *ServiceServer) WaitForService(
+	ctx context.Context,
+	id uuid.UUID) chan error {
+	sSrv.log.Debugw("wait for service",
+		"srvID", sSrv.ID,
+		"service ID", id)
 
-	sr, ok := sSrv.services[id]
-	if !ok {
-		return false
+	resChan := make(chan error, 1)
+
+	if id != uuid.Nil {
+		sSrv.Lock()
+		_, ok := sSrv.services[id]
+		sSrv.Unlock()
+
+		if !ok {
+			resChan <- fmt.Errorf("couldn't find service %s", id.String())
+			close(resChan)
+			sSrv.log.Errorw("service isn't found for wait",
+				"srvID", sSrv.ID,
+				"service ID", id)
+
+			return resChan
+		}
 	}
 
-	if sr.state == SSEnded || sr.state == SSFailed {
-		return true
-	}
+	go func() {
+		for {
+			// check context
+			select {
+			case <-ctx.Done():
+				resChan <- ctx.Err()
+				close(resChan)
 
-	return false
+				return
+
+			default:
+			}
+
+			cnt := 0
+
+			sSrv.Lock()
+
+			for _, rs := range sSrv.services {
+				if rs.state == SSEnded || rs.state == SSFailed {
+					cnt++
+
+					// check finalization of one Service
+					if id != uuid.Nil && rs.id == id {
+						resChan <- nil
+						close(resChan)
+						sSrv.Unlock()
+
+						return
+					}
+				}
+			}
+
+			// check all services ended
+			if id == uuid.Nil && cnt == len(sSrv.services) {
+				resChan <- nil
+				close(resChan)
+				sSrv.Unlock()
+
+				return
+			}
+
+			sSrv.Unlock()
+		}
+	}()
+
+	return resChan
 }

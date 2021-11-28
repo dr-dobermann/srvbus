@@ -26,6 +26,7 @@ linters:
     fast: false
     enable-all: true
     disable:
+        - gofmt # File is not `gofmt`-ed with `-s`
         - goerr113 # Use static errors instead dynamic ones
         - varnamelen # Variable name is too short for the scope
         - interfacer # The linter 'interfacer' is deprecated
