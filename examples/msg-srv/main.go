@@ -17,10 +17,7 @@ func main() {
 		panic("couldn't get a logger :" + err.Error())
 	}
 
-	ctx, cancel := context.WithDeadline(
-		context.Background(),
-		time.Now().Add(20*time.Second))
-	defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	mSrv, err := ms.New(uuid.New(), "myserver", log.Sugar())
 	if mSrv == nil || err != nil {
@@ -54,4 +51,7 @@ func main() {
 			"from", m.Sender)
 	}
 
+	cancel()
+
+	time.Sleep(5 * time.Second)
 }

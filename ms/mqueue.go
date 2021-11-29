@@ -104,8 +104,6 @@ func (q *mQueue) loop() {
 			close(q.mReqCh)
 			close(q.mCntCh)
 
-			q.regCh, q.mReqCh, q.mCntCh = nil, nil, nil
-
 			return
 
 		case mrr := <-q.regCh:

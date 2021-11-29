@@ -35,7 +35,9 @@ type MessageServer struct {
 
 	queues map[string]*mQueue
 
-	ctxCh chan context.Context
+	ctx context.Context
+
+	runned bool
 }
 
 // IsRunned returns the current running state of the MessageServer.
@@ -43,13 +45,7 @@ func (mSrv *MessageServer) IsRunned() bool {
 	mSrv.Lock()
 	defer mSrv.Unlock()
 
-	if mSrv.ctxCh == nil {
-		return false
-	}
-
-	_, ok := <-mSrv.ctxCh
-
-	return ok
+	return mSrv.runned
 }
 
 // QueueStat represent the statistics for a single queue.
@@ -117,13 +113,13 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 	// all old queues should be deleted
 	mSrv.Lock()
 	mSrv.queues = map[string]*mQueue{}
+	mSrv.ctx = ctx
+	mSrv.runned = true
 	mSrv.Unlock()
 
 	mSrv.log.Infow("message server started",
 		"mSrvID", mSrv.id,
 		"name", mSrv.Name)
-
-	mSrv.ctxCh = make(chan context.Context)
 
 	go func() {
 		for {
@@ -135,20 +131,18 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 					q.stop()
 				}
 
-				mSrv.Unlock()
+				mSrv.runned = false
+				mSrv.ctx = context.Background()
 
-				close(mSrv.ctxCh)
+				mSrv.Unlock()
 
 				mSrv.log.Infow("message server stopped",
 					"mSrvID", mSrv.id,
 					"name", mSrv.Name)
 
 				return
-
-			// put an actual context into the channel for
-			// the put and get messages functions and to
-			// indicate the Server is running.
-			case mSrv.ctxCh <- ctx:
+			default:
+				continue
 			}
 		}
 	}()
@@ -170,20 +164,15 @@ func (mSrv *MessageServer) PutMessages(
 		return fmt.Errorf("empty queue name for messages putting")
 	}
 
-	// check if the server is ruuning
-	if mSrv.ctxCh == nil {
-		return fmt.Errorf("server isn't runned")
-	}
-
-	ctx, ok := <-mSrv.ctxCh
-	if !ok {
-		return fmt.Errorf("server isn't runned")
-	}
-
 	mSrv.Lock()
 	defer mSrv.Unlock()
 
-	_, ok = mSrv.queues[queue]
+	// check if the server is running
+	if !mSrv.runned {
+		return fmt.Errorf("server isn't runned")
+	}
+
+	_, ok := mSrv.queues[queue]
 	if !ok {
 		q, err := newQueue(uuid.New(), queue, mSrv.log)
 		if err != nil {
@@ -201,7 +190,7 @@ func (mSrv *MessageServer) PutMessages(
 
 	mSrv.log.Debugw("putting messages", "queue", q.name)
 
-	return q.putMessages(ctx, sender, msgs...)
+	return q.putMessages(mSrv.ctx, sender, msgs...)
 }
 
 // GetMessages reads all new messages form the queue and returns
@@ -224,17 +213,16 @@ func (mSrv *MessageServer) GetMessages(
 				queue, mSrv.Name)
 	}
 
-	// check if the server is ruuning
-	if mSrv.ctxCh == nil {
-		return nil, fmt.Errorf("server isn't runned")
-	}
+	mSrv.Lock()
+	runned := mSrv.runned
+	mSrv.Unlock()
 
-	ctx, ok := <-mSrv.ctxCh
-	if !ok {
+	// check if the server is ruuning
+	if !runned {
 		return nil, fmt.Errorf("server isn't runned")
 	}
 
 	mSrv.log.Debugw("getting messages", "queue", q.name)
 
-	return q.getMessages(ctx, receiver, fromBegin)
+	return q.getMessages(mSrv.ctx, receiver, fromBegin)
 }
