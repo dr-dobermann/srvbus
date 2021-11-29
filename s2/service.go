@@ -4,7 +4,19 @@ import (
 	"context"
 	"fmt"
 	"io"
+
+	"github.com/dr-dobermann/srvbus/ms"
+	"github.com/google/uuid"
 )
+
+// new.....Service has common signature
+//   func(ctx context.Context,
+//        params ...serviceParams) (ServiceRunner, error)
+//
+// the context used here is different from the one used on service
+// execution. The context is only used in case there is long
+// preparation procedure needed to create a service.
+// Usually it would be ignored by "_ context.Context" declaration.
 
 // =============================================================================
 //    Output Service
@@ -26,4 +38,28 @@ func newOutputService(
 	}
 
 	return ServiceFunc(outputSvc), nil
+}
+
+// =============================================================================
+//    Put Messages Service
+
+func newPutMessagesService(
+	_ context.Context,
+	mSrv *ms.MessageServer,
+	queue string,
+	sender uuid.UUID,
+	msgs ...*ms.Message) (ServiceRunner, error) {
+
+	if mSrv == nil || queue == "" || len(msgs) == 0 {
+		return nil, fmt.Errorf("invalid parameter for PutMessage Service : "+
+			"mSrv(%p), queue name(%s), msg num(%d)",
+			mSrv, queue, len(msgs))
+	}
+
+	putMessages := func(_ context.Context) error {
+
+		return mSrv.PutMessages(sender, queue, msgs...)
+	}
+
+	return ServiceFunc(putMessages), nil
 }

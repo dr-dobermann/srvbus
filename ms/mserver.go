@@ -131,6 +131,7 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 
 	go func() {
 		for {
+
 			select {
 			case <-ctx.Done():
 				mSrv.Lock()

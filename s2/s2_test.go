@@ -12,32 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestOutputSvc(t *testing.T) {
-	is := is.New(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// create service
-	out := bytes.NewBuffer([]byte{})
-	testStr := []string{"Hello ", "Dober!"}
-
-	svc, err := newOutputService(ctx, out, testStr[0], testStr[1])
-	is.NoErr(err)
-	is.True(svc != nil)
-
-	// testing invalid params
-	t.Run("invalid_params", func(t *testing.T) {
-		_, err := newOutputService(ctx, nil, "this is a test")
-		is.True(err != nil)
-	})
-
-	// run service and check results
-	err = svc.Run(ctx)
-	is.NoErr(err)
-	is.Equal(out.String(), strings.Join(testStr, ""))
-}
-
 func TestSvcServer(t *testing.T) {
 	is := is.New(t)
 
