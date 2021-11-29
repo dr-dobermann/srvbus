@@ -43,6 +43,8 @@ func newOutputService(
 // =============================================================================
 //    Put Messages Service
 
+// newPutMessagesService returns ServiceFunc which puts all messages msgs into
+// the queue 'queue' on Message Server mSrv.
 func newPutMessagesService(
 	_ context.Context,
 	mSrv *ms.MessageServer,
@@ -50,10 +52,11 @@ func newPutMessagesService(
 	sender uuid.UUID,
 	msgs ...*ms.Message) (ServiceRunner, error) {
 
-	if mSrv == nil || queue == "" || len(msgs) == 0 {
+	if mSrv == nil || queue == "" ||
+		sender == uuid.Nil || len(msgs) == 0 {
 		return nil, fmt.Errorf("invalid parameter for PutMessage Service : "+
-			"mSrv(%p), queue name(%s), msg num(%d)",
-			mSrv, queue, len(msgs))
+			"mSrv(%p), queue name(%s), no sender(%t), msg num(%d)",
+			mSrv, queue, sender == uuid.Nil, len(msgs))
 	}
 
 	putMessages := func(_ context.Context) error {
@@ -62,4 +65,23 @@ func newPutMessagesService(
 	}
 
 	return ServiceFunc(putMessages), nil
+}
+
+// =============================================================================
+//      Get Messages Service
+
+func newGetMessagesService(
+	ctx context.Context,
+	mSrv *ms.MessageServer,
+	queue string,
+	waitForQueue bool,
+	minMessagesNumber int,
+	mesCh chan ms.MessageEnvelope) (ServiceRunner, error) {
+	if mSrv == nil || queue == "" || mesCh == nil {
+		return nil, fmt.Errorf("invalid parameter for PutMessage Service : "+
+			"mSrv(%p), queue name(%s), messages channel is nil(%t)",
+			mSrv, queue, mesCh == nil)
+	}
+
+	return nil, fmt.Errorf("not implemented yet")
 }

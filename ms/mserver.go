@@ -93,14 +93,13 @@ func New(
 	}
 
 	ms := &MessageServer{
-		id:     id,
-		Name:   name,
-		log:    log,
-		queues: make(map[string]*mQueue)}
+		id:   id,
+		Name: name,
+		log:  log}
 
-	log.Debugw("Message Server created",
-		"name", ms.Name,
-		"id", ms.id)
+	log.Debugw("message Server created",
+		"mSrvID", ms.id,
+		"name", ms.Name)
 
 	return ms, nil
 }
@@ -109,43 +108,42 @@ func New(
 func (mSrv *MessageServer) Run(ctx context.Context) {
 	if mSrv.IsRunned() {
 		mSrv.log.Infow("alredy runned",
-			"id", mSrv.id,
+			"mSrvID", mSrv.id,
 			"name", mSrv.Name)
 
 		return
 	}
 
-	// in case of restarting the Message Server
 	// all old queues should be deleted
-	if mSrv.ctxCh != nil {
-		mSrv.Lock()
-		mSrv.queues = map[string]*mQueue{}
-		mSrv.Unlock()
-	}
+	mSrv.Lock()
+	mSrv.queues = map[string]*mQueue{}
+	mSrv.Unlock()
 
 	mSrv.log.Infow("message server started",
-		"id", mSrv.id,
+		"mSrvID", mSrv.id,
 		"name", mSrv.Name)
 
 	mSrv.ctxCh = make(chan context.Context)
 
 	go func() {
 		for {
-
 			select {
 			case <-ctx.Done():
 				mSrv.Lock()
-				defer mSrv.Unlock()
 
 				for _, q := range mSrv.queues {
 					q.stop()
 				}
 
+				mSrv.Unlock()
+
 				close(mSrv.ctxCh)
 
 				mSrv.log.Infow("message server stopped",
-					"id", mSrv.id,
+					"mSrvID", mSrv.id,
 					"name", mSrv.Name)
+
+				return
 
 			// put an actual context into the channel for
 			// the put and get messages functions and to

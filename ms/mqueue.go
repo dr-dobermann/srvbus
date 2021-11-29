@@ -54,6 +54,7 @@ type mQueue struct {
 	mReqCh chan queueMessagesRequest
 
 	// queue's messages number request channnel
+	// it is also used as queue active flag
 	mCntCh chan int
 
 	// number of messages in the queue
@@ -103,6 +104,8 @@ func (q *mQueue) loop() {
 			close(q.mReqCh)
 			close(q.mCntCh)
 
+			q.regCh, q.mReqCh, q.mCntCh = nil, nil, nil
+
 			return
 
 		case mrr := <-q.regCh:
@@ -121,7 +124,7 @@ func (q *mQueue) loop() {
 
 			q.log.Debugw("message registered",
 				"queue", q.name,
-				"id", me.id,
+				"msgID", me.id,
 				"key", me.Key)
 
 		case mReq := <-q.mReqCh:
@@ -204,7 +207,7 @@ func newQueue(
 
 // Stop stops the message registration cycle.
 func (q *mQueue) stop() {
-	q.log.Infow("message stop", "queue", q.name)
+	q.log.Infow("message queue processing stop", "queue", q.name)
 
 	close(q.stopCh)
 }

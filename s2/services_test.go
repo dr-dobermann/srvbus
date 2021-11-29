@@ -5,7 +5,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/dr-dobermann/srvbus/ms"
 	"github.com/google/uuid"
@@ -39,7 +38,7 @@ func TestOutputSvc(t *testing.T) {
 	is.Equal(out.String(), strings.Join(testStr, ""))
 }
 
-func TestPutMessagesSvc(t *testing.T) {
+func TestPutGetMessagesSvc(t *testing.T) {
 	is := is.New(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -55,19 +54,54 @@ func TestPutMessagesSvc(t *testing.T) {
 	is.NoErr(err)
 	is.True(mSrv != nil)
 
+	qn := "test_queue"
+
+	// invalid params for put messages
+	t.Run("invalid_params:putMessages", func(t *testing.T) {
+		// no message server
+		_, err = newPutMessagesService(ctx, nil, "queue", uuid.New(),
+			ms.GetMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!")))
+		is.True(err != nil)
+
+		// no queue
+		_, err := newPutMessagesService(ctx, mSrv, "", uuid.New(),
+			ms.GetMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!")))
+		is.True(err != nil)
+
+		// no sender
+		_, err = newPutMessagesService(ctx, mSrv, qn, uuid.Nil,
+			ms.GetMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!")))
+		is.True(err != nil)
+
+		// no messages
+		_, err = newPutMessagesService(ctx, mSrv, qn, uuid.New(),
+			[]*ms.Message{}...)
+		is.True(err != nil)
+	})
+
 	mSrv.Run(ctx)
 
-	svc, err := newPutMessagesService(
+	svcPut, err := newPutMessagesService(
 		ctx,
 		mSrv,
-		"test_queue",
+		qn,
 		uuid.New(),
 		ms.GetMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!")))
 	is.NoErr(err)
-	is.True(svc != nil)
+	is.True(svcPut != nil)
 
-	// err = svc.Run(ctx)
-	// is.NoErr(err)
+	err = svcPut.Run(ctx)
+	is.NoErr(err)
 
-	time.Sleep(5 * time.Second)
+	msgChan := make(chan ms.MessageEnvelope)
+	svcGet, err := newGetMessagesService(
+		ctx,
+		mSrv,
+		qn,
+		true,
+		0,
+		msgChan)
+	is.NoErr(err)
+	is.True(svcGet != nil)
+
 }
