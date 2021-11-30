@@ -69,7 +69,13 @@ func (mSrv *MessageServer) Queues() []QueueStat {
 }
 
 // HasQueue checks if the queue is present on the server.
+//
+// if the server isn't running, false will be returned.
 func (mSrv *MessageServer) HasQueue(queue string) bool {
+	if !mSrv.IsRunned() {
+		return false
+	}
+
 	mSrv.Lock()
 	defer mSrv.Unlock()
 

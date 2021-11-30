@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/dr-dobermann/srvbus/ms"
 	"github.com/google/uuid"
@@ -70,11 +71,16 @@ func newPutMessagesService(
 // =============================================================================
 //      Get Messages Service
 
+// newGetMessagesService creates a ServiceFunc which reads all
+// available messaes into channel mesCh.
 func newGetMessagesService(
-	ctx context.Context,
+	_ context.Context,
 	mSrv *ms.MessageServer,
 	queue string,
+	receiver uuid.UUID,
+	fromBegin bool,
 	waitForQueue bool,
+	waitingTime time.Duration,
 	minMessagesNumber int,
 	mesCh chan ms.MessageEnvelope) (ServiceRunner, error) {
 	if mSrv == nil || queue == "" || mesCh == nil {
@@ -83,5 +89,87 @@ func newGetMessagesService(
 			mSrv, queue, mesCh == nil)
 	}
 
-	return nil, fmt.Errorf("not implemented yet")
+	getMsgs := func(ctx context.Context) error {
+		if !waitForQueue && !mSrv.HasQueue(queue) {
+			return fmt.Errorf("no queue '%s' on the server", queue)
+		}
+
+		// wait for the queue if it's not existed yet
+		if !mSrv.HasQueue(queue) {
+			// set the wait-for-the-queue timeout by the derived context
+			wCtx, wCancel := context.WithTimeout(ctx, waitingTime)
+			defer wCancel()
+
+			ch, err := mSrv.WaitForQueue(wCtx, queue)
+			if err != nil {
+				return fmt.Errorf("queue '%s' waiting error : %w",
+					queue, err)
+			}
+
+			res := <-ch
+			close(ch)
+
+			if !res {
+				return fmt.Errorf("queue '%s' readiness timeout reached",
+					queue)
+			}
+		}
+
+		if minMessagesNumber <= 0 {
+			minMessagesNumber = -1
+		}
+
+		// reading messages
+		mm := []ms.MessageEnvelope{}
+		for len(mm) >= minMessagesNumber {
+			// check context closing
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("GetMessages service "+
+					"terminated by context : %w", ctx.Err())
+
+			default:
+			}
+
+			mes, err := mSrv.GetMessages(receiver, queue, fromBegin)
+			if err != nil {
+				return fmt.Errorf("GetMessageSvc reading queue "+
+					"'%s' messages error : %w",
+					queue, err)
+			}
+
+			mm = append(mm, mes...)
+
+			// if we should return as many messages as
+			// we could get for a single ms.GetMessages call
+			// return only currently readed.
+			if minMessagesNumber == -1 {
+				break
+			}
+		}
+
+		// send messages into the results channel
+		go func() {
+			for len(mm) > 0 {
+				select {
+				// check context closing
+				case <-ctx.Done():
+					close(mesCh)
+					return
+
+				// sent messages one by one
+				default:
+					m := mm[0]
+					mm = append(mm[:0], mm[1:]...)
+					mesCh <- m
+				}
+			}
+
+			close(mesCh)
+		}()
+
+		return nil
+	}
+
+	return ServiceFunc(getMsgs), nil
 }

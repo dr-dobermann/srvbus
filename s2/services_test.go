@@ -3,8 +3,10 @@ package s2
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dr-dobermann/srvbus/ms"
 	"github.com/google/uuid"
@@ -98,10 +100,27 @@ func TestPutGetMessagesSvc(t *testing.T) {
 		ctx,
 		mSrv,
 		qn,
+		uuid.New(),
+		false,
 		true,
+		5*time.Second,
 		0,
 		msgChan)
 	is.NoErr(err)
 	is.True(svcGet != nil)
 
+	go func() {
+		for me := range msgChan {
+			fmt.Println("   ====> ", me.String())
+		}
+	}()
+
+	err = svcGet.Run(ctx)
+	is.NoErr(err)
+
+	if err != nil {
+		close(msgChan)
+	}
+
+	time.Sleep(2 * time.Second)
 }

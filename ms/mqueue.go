@@ -18,6 +18,12 @@ type MessageEnvelope struct {
 	Sender     uuid.UUID
 }
 
+func (me MessageEnvelope) String() string {
+	return fmt.Sprintf("MessageEnvelope(id : %v, registered at: %v from : %s "+
+		"[key : \"%s\", value : \"%s\"])",
+		me.id, me.Registered, me.Sender, me.Key, string(me.data))
+}
+
 // msgRegRequest is used for message registration on server.
 type msgRegRequest struct {
 	sender uuid.UUID
