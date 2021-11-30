@@ -35,6 +35,28 @@ the third parameter `fromBegin` shold be set to `true`.
 
 If there are no queue the receiver are asking messages from, then error will be returned.
 
+## Checking queues
+
+MessageServer has two methods to work with queues. `HasQueue` check if the queue is registered on the server. `WaitForQueue` creates a wathing go-routine which wait until the queue appears on the server or timeout exceeds whichever comes first. Timeout could be set over the context sent to the function.
+
+    wCtx, wCancel := context.WithDeadline(ctx, time.Now().Add(2 * time.Second))
+	    defer wCancel
+
+    wCh, err := mSrv.WaitForQueue(wCtx, "queue_name")
+    if err != nil {
+        panic(err.Error())
+    }
+
+    res := <-wCh
+    close(wCh)
+
+    if !res {
+        // do compensation
+    }
+
+    // do actual things (i.e. GetMessages)
+
+
 ## Getting a list of the queues existed on the server
 
 To get a list of queues existed on the server the method `Queues` should be invoked. It returns a slice of the `QueueStat` structs which consist queue name and the number of messages in the queue. If the number of message is -1, then the queue's processing is stopped and it couldn't put into or get out messages.
