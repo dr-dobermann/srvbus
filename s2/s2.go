@@ -45,11 +45,12 @@ func (sf ServiceFunc) Run(ctx context.Context) error {
 // serviceRecord holds information about single Service registered on the
 // Service Server
 type serviceRecord struct {
-	id        uuid.UUID
-	name      string
-	svc       ServiceRunner
-	state     svcState
-	lastError error
+	id          uuid.UUID
+	name        string
+	svc         ServiceRunner
+	state       svcState
+	lastError   error
+	stopChannel chan struct{}
 }
 
 // svcState presents current Service state.
@@ -207,7 +208,7 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 		// check if context cancelled
 		select {
 		case <-ctx.Done():
-			sSrv.log.Debugw("server stopped",
+			sSrv.log.Infow("server stopped",
 				"id", sSrv.ID,
 				"name", sSrv.Name)
 
@@ -220,6 +221,7 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 
 		for id, sr := range sSrv.services {
 			sr := sr
+			id := id
 			if sr.state == SSReady {
 				sr.state = SSRunning
 
@@ -252,7 +254,7 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 // to stop the server just call canecel function of the
 // context.
 func (sSrv *ServiceServer) Run(ctx context.Context) error {
-	sSrv.log.Debugw("server started",
+	sSrv.log.Infow("server started",
 		"id", sSrv.ID,
 		"name", sSrv.Name)
 
@@ -271,7 +273,9 @@ func (sSrv *ServiceServer) Run(ctx context.Context) error {
 // Add registers service on the server and returns its ID.
 func (sSrv *ServiceServer) AddService(
 	name string,
-	s ServiceRunner) (uuid.UUID, error) {
+	s ServiceRunner,
+	stopCh chan struct{},
+	startImmediately bool) (uuid.UUID, error) {
 	if s == nil {
 		return uuid.Nil, fmt.Errorf("couldn't register nil-service")
 	}
@@ -284,25 +288,34 @@ func (sSrv *ServiceServer) AddService(
 
 	sSrv.Lock()
 	sSrv.services[id] = &serviceRecord{
-		id:    id,
-		name:  name,
-		state: SSRegistered,
-		svc:   s}
+		id:          id,
+		name:        name,
+		svc:         s,
+		state:       SSRegistered,
+		lastError:   nil,
+		stopChannel: stopCh}
 	sSrv.Unlock()
 
 	sSrv.log.Debugw("new service registered",
 		"id", id,
 		"name", name)
 
+	if startImmediately {
+		if err := sSrv.ExecService(id); err != nil {
+			return id, err
+		}
+	}
+
 	return id, nil
 }
 
 // ExecService sends meassge to update Service state
 // from SSRegistered to SSReady so it could start.
-func (sSrv *ServiceServer) ExecService(id uuid.UUID) error {
+func (sSrv *ServiceServer) ExecService(
+	id uuid.UUID) error {
 	sSrv.Lock()
 	sr, ok := sSrv.services[id]
-	defer sSrv.Unlock()
+	sSrv.Unlock()
 
 	if !ok {
 		sSrv.log.Errorw("service isn't found",
@@ -322,6 +335,58 @@ func (sSrv *ServiceServer) ExecService(id uuid.UUID) error {
 			id.String(), sr.state.String())
 	}
 
+	sSrv.cvcReadyCh <- id
+
+	return nil
+}
+
+// StopService stops service which have non-nil stopChannel.
+func (sSrv *ServiceServer) StopService(id uuid.UUID) error {
+	sSrv.Lock()
+	defer sSrv.Unlock()
+
+	sr, ok := sSrv.services[id]
+	if !ok {
+		return fmt.Errorf("couldn't find service %v", id)
+	}
+
+	if sr.state != SSRunning {
+		return fmt.Errorf("service # %v isn't running(%s)",
+			id, sr.state.String())
+	}
+
+	if sr.stopChannel != nil {
+		go func() {
+			sr.stopChannel <- struct{}{}
+		}()
+	}
+
+	return nil
+}
+
+// ResumeService continues previously stopped or ended service.
+//
+// The service should have stopChannel to be resumed.
+// Running services could not be resumed.
+func (sSrv *ServiceServer) ResumeService(id uuid.UUID) error {
+	sSrv.Lock()
+	defer sSrv.Unlock()
+
+	sr, ok := sSrv.services[id]
+	if !ok {
+		return fmt.Errorf("couldn't find service %v", id)
+	}
+
+	if sr.stopChannel == nil {
+		return fmt.Errorf("service # %v couldn't have stopChannel :"+
+			" cannot be stopped/resumed", id)
+	}
+
+	if sr.state == SSRunning {
+		return fmt.Errorf("service # %v is running. Couldn't resume it", id)
+	}
+
+	sr.state = SSRegistered
 	sSrv.cvcReadyCh <- id
 
 	return nil
@@ -376,10 +441,14 @@ func (sSrv *ServiceServer) WaitForService(
 			sSrv.Lock()
 
 			for _, rs := range sSrv.services {
+				// pass through all finalized services
 				if rs.state == SSEnded || rs.state == SSFailed {
+					// and count them
 					cnt++
 
 					// check finalization of one Service
+					// tell that nedded Service is ended
+					// and return
 					if id != uuid.Nil && rs.id == id {
 						resChan <- nil
 						close(resChan)
@@ -390,7 +459,9 @@ func (sSrv *ServiceServer) WaitForService(
 				}
 			}
 
-			// check all services ended
+			// if it's awaited all the services ended
+			// whait until nuber of ended services is not equal to
+			// number of services
 			if id == uuid.Nil && cnt == len(sSrv.services) {
 				resChan <- nil
 				close(resChan)
@@ -450,6 +521,7 @@ type Info struct {
 	Svcs []string
 }
 
+// Stat returns s2 server statistics.
 func (sSrv *ServiceServer) Stat() S2Stat {
 	stat := new(S2Stat)
 	stat.Splits = make(map[string]Info)

@@ -40,11 +40,11 @@ func TestSvcServer(t *testing.T) {
 	// register service
 	output := bytes.NewBuffer([]byte{})
 	testStr := []string{"Hello ", "Dober!"}
-	svc, err := newOutputService(ctx, output, testStr[0], testStr[1])
+	svc, err := NewOutputService(ctx, output, testStr[0], testStr[1])
 	is.NoErr(err)
 	is.True(svc != nil)
 
-	id, err := sSrv.AddService("OutputService", svc)
+	id, err := sSrv.AddService("OutputService", svc, nil, false)
 	is.NoErr(err)
 	is.True(id != uuid.Nil)
 

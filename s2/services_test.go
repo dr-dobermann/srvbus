@@ -24,13 +24,13 @@ func TestOutputSvc(t *testing.T) {
 	out := bytes.NewBuffer([]byte{})
 	testStr := []string{"Hello ", "Dober!"}
 
-	svc, err := newOutputService(ctx, out, testStr[0], testStr[1])
+	svc, err := NewOutputService(ctx, out, testStr[0], testStr[1])
 	is.NoErr(err)
 	is.True(svc != nil)
 
 	// testing invalid params
 	t.Run("invalid_params", func(t *testing.T) {
-		_, err := newOutputService(ctx, nil, "this is a test")
+		_, err := NewOutputService(ctx, nil, "this is a test")
 		is.True(err != nil)
 	})
 
@@ -61,29 +61,29 @@ func TestPutGetMessagesSvc(t *testing.T) {
 	// invalid params for put messages
 	t.Run("invalid_params:putMessages", func(t *testing.T) {
 		// no message server
-		_, err = newPutMessagesService(ctx, nil, "queue", uuid.New(),
+		_, err = NewPutMessagesService(ctx, nil, "queue", uuid.New(),
 			ms.GetMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!")))
 		is.True(err != nil)
 
 		// no queue
-		_, err := newPutMessagesService(ctx, mSrv, "", uuid.New(),
+		_, err := NewPutMessagesService(ctx, mSrv, "", uuid.New(),
 			ms.GetMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!")))
 		is.True(err != nil)
 
 		// no sender
-		_, err = newPutMessagesService(ctx, mSrv, qn, uuid.Nil,
+		_, err = NewPutMessagesService(ctx, mSrv, qn, uuid.Nil,
 			ms.GetMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!")))
 		is.True(err != nil)
 
 		// no messages
-		_, err = newPutMessagesService(ctx, mSrv, qn, uuid.New(),
+		_, err = NewPutMessagesService(ctx, mSrv, qn, uuid.New(),
 			[]*ms.Message{}...)
 		is.True(err != nil)
 	})
 
 	mSrv.Run(ctx)
 
-	svcPut, err := newPutMessagesService(
+	svcPut, err := NewPutMessagesService(
 		ctx,
 		mSrv,
 		qn,
@@ -96,7 +96,7 @@ func TestPutGetMessagesSvc(t *testing.T) {
 	is.NoErr(err)
 
 	msgChan := make(chan ms.MessageEnvelope)
-	svcGet, err := newGetMessagesService(
+	svcGet, err := NewGetMessagesService(
 		ctx,
 		mSrv,
 		qn,
@@ -109,10 +109,18 @@ func TestPutGetMessagesSvc(t *testing.T) {
 	is.NoErr(err)
 	is.True(svcGet != nil)
 
+	cntChan := make(chan int)
 	go func() {
+		cnt := 0
 		for me := range msgChan {
-			fmt.Println("   ====> ", me.String())
+			fmt.Println("\n   ====> ", me.String())
+			cnt++
 		}
+		fmt.Println()
+
+		cntChan <- cnt
+
+		close(cntChan)
 	}()
 
 	err = svcGet.Run(ctx)
@@ -122,5 +130,5 @@ func TestPutGetMessagesSvc(t *testing.T) {
 		close(msgChan)
 	}
 
-	time.Sleep(2 * time.Second)
+	is.Equal(<-cntChan, 1)
 }

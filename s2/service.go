@@ -10,6 +10,18 @@ import (
 	"github.com/google/uuid"
 )
 
+// MustServiceRunner is a helper which returns ServiceRunner if
+// there wasn't any error on its creation.
+//
+// If there was any error, then panic fires
+func MustServiceRunner(s ServiceRunner, err error) ServiceRunner {
+	if err != nil {
+		panic("error while service creation : " + err.Error())
+	}
+
+	return s
+}
+
 // new.....Service has common signature
 //   func(ctx context.Context,
 //        params ...serviceParams) (ServiceRunner, error)
@@ -22,9 +34,9 @@ import (
 // =============================================================================
 //    Output Service
 
-// newOutputService returns an output ServiceFunc which
+// NewOutputService returns an output ServiceFunc which
 // puts all values form vl into io.Writer w.
-func newOutputService(
+func NewOutputService(
 	_ context.Context,
 	w io.Writer,
 	vl ...interface{}) (ServiceRunner, error) {
@@ -44,9 +56,9 @@ func newOutputService(
 // =============================================================================
 //    Put Messages Service
 
-// newPutMessagesService returns ServiceFunc which puts all messages msgs into
+// NewPutMessagesService returns ServiceFunc which puts all messages msgs into
 // the queue 'queue' on Message Server mSrv.
-func newPutMessagesService(
+func NewPutMessagesService(
 	_ context.Context,
 	mSrv *ms.MessageServer,
 	queue string,
@@ -55,9 +67,10 @@ func newPutMessagesService(
 
 	if mSrv == nil || queue == "" ||
 		sender == uuid.Nil || len(msgs) == 0 {
-		return nil, fmt.Errorf("invalid parameter for PutMessage Service : "+
-			"mSrv(%p), queue name(%s), no sender(%t), msg num(%d)",
-			mSrv, queue, sender == uuid.Nil, len(msgs))
+		return nil,
+			fmt.Errorf("invalid parameter for PutMessage Service : "+
+				"mSrv(%p), queue name(%s), no sender(%t), msg num(%d)",
+				mSrv, queue, sender == uuid.Nil, len(msgs))
 	}
 
 	putMessages := func(_ context.Context) error {
@@ -73,7 +86,7 @@ func newPutMessagesService(
 
 // newGetMessagesService creates a ServiceFunc which reads all
 // available messaes into channel mesCh.
-func newGetMessagesService(
+func NewGetMessagesService(
 	_ context.Context,
 	mSrv *ms.MessageServer,
 	queue string,
@@ -83,10 +96,15 @@ func newGetMessagesService(
 	waitingTime time.Duration,
 	minMessagesNumber int,
 	mesCh chan ms.MessageEnvelope) (ServiceRunner, error) {
-	if mSrv == nil || queue == "" || mesCh == nil {
-		return nil, fmt.Errorf("invalid parameter for PutMessage Service : "+
-			"mSrv(%p), queue name(%s), messages channel is nil(%t)",
-			mSrv, queue, mesCh == nil)
+	if mSrv == nil ||
+		queue == "" ||
+		mesCh == nil ||
+		receiver == uuid.Nil {
+		return nil,
+			fmt.Errorf("invalid parameter for PutMessage Service : "+
+				"mSrv(%p), queue name(%s), reciever is empty(%t) "+
+				"messages channel is nil(%t)",
+				mSrv, queue, receiver == uuid.Nil, mesCh == nil)
 	}
 
 	getMsgs := func(ctx context.Context) error {
