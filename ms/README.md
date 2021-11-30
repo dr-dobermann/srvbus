@@ -37,7 +37,9 @@ If there are no queue the receiver are asking messages from, then error will be 
 
 ## Checking queues
 
-MessageServer has two methods to work with queues. `HasQueue` check if the queue is registered on the server. `WaitForQueue` creates a wathing go-routine which wait until the queue appears on the server or timeout exceeds whichever comes first. Timeout could be set over the context sent to the function.
+MessageServer has two methods to work with queues. `HasQueue` check if the queue is registered on the server. `WaitForQueue` creates a wathing go-routine which wait until the queue appears on the server or timeout exceeds whichever comes first.
+
+In case the queue was appeard until timeout ends the true will send over the returned channel. If tiemout was reached or cancel function of the given context was called then false sent over the channel. Timeout could be set over the context sent to the function.
 
     wCtx, wCancel := context.WithDeadline(ctx, time.Now().Add(2 * time.Second))
 	    defer wCancel
