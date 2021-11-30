@@ -45,14 +45,16 @@ func TestQueue(t *testing.T) {
 	// queue creating tests
 	sugar := logger.Sugar()
 
-	q, err := newQueue(uuid.Nil, qn, sugar)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	q, err := newQueue(ctx, uuid.Nil, qn, sugar)
 	is.NoErr(err)
 	is.Equal(qn, q.Name())
 	is.True(q.ID() != uuid.Nil)
 
 	t.Run("queue with no logger",
 		func(t *testing.T) {
-			q2, err := newQueue(uuid.Nil, "", nil)
+			q2, err := newQueue(ctx, uuid.Nil, "", nil)
 			is.True(err != nil)
 			is.Equal(q2, nil)
 		})
@@ -60,13 +62,10 @@ func TestQueue(t *testing.T) {
 	t.Run("auto-set of queue name",
 		func(t *testing.T) {
 			qid := uuid.New()
-			q2, err := newQueue(qid, "", sugar)
+			q2, err := newQueue(ctx, qid, "", sugar)
 			is.NoErr(err)
 			is.Equal(q2.Name(), "mQueue #"+qid.String())
 		})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// testing of putting messages into the queue
 	t.Run("empty msg list",
@@ -112,7 +111,6 @@ func TestQueue(t *testing.T) {
 	is.Equal(len(mes), 2)
 
 	// stop queue processing
-	q.stop()
+	cancel()
 	is.True(!q.isActive())
-
 }

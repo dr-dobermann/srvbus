@@ -47,9 +47,6 @@ type mQueue struct {
 	// messages registration channel
 	regCh chan msgRegRequest
 
-	// queuue processing stop command channel
-	stopCh chan struct{}
-
 	// messages return channel
 	mReqCh chan queueMessagesRequest
 
@@ -96,10 +93,10 @@ func (q mQueue) Name() string {
 // in the queue.
 //
 //nolint:cyclop
-func (q *mQueue) loop() {
+func (q *mQueue) loop(ctx context.Context) {
 	for {
 		select {
-		case <-q.stopCh:
+		case <-ctx.Done():
 			close(q.regCh)
 			close(q.mReqCh)
 			close(q.mCntCh)
@@ -169,6 +166,7 @@ func (q *mQueue) loop() {
 //
 // newQueue runs the queue processing loop.
 func newQueue(
+	ctx context.Context,
 	id uuid.UUID,
 	name string,
 	log *zap.SugaredLogger) (*mQueue, error) {
@@ -191,23 +189,15 @@ func newQueue(
 		lastReaded: make(map[uuid.UUID]int),
 		log:        log,
 		regCh:      make(chan msgRegRequest),
-		stopCh:     make(chan struct{}),
 		mReqCh:     make(chan queueMessagesRequest),
 		mCntCh:     make(chan int)}
 
 	// start processing loop
-	go q.loop()
+	go q.loop(ctx)
 
 	log.Debugw("new message queue is created", "name", q.name, "id", q.id)
 
 	return &q, nil
-}
-
-// Stop stops the message registration cycle.
-func (q *mQueue) stop() {
-	q.log.Infow("message queue processing stop", "queue", q.name)
-
-	close(q.stopCh)
 }
 
 // putMessages puts messages into the queue q.
@@ -243,8 +233,6 @@ func (q *mQueue) putMessages(
 		m := m
 		select {
 		case <-ctx.Done():
-			close(q.stopCh)
-
 			q.log.Error("context stopped for putting messages")
 
 			return fmt.Errorf("put messages interrupted by context : %w",
@@ -295,8 +283,6 @@ func (q *mQueue) getMessages(
 	for {
 		select {
 		case <-ctx.Done():
-			close(q.stopCh)
-
 			return nil,
 				fmt.Errorf("message getting closed by context : %w",
 					ctx.Err())

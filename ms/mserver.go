@@ -68,6 +68,16 @@ func (mSrv *MessageServer) Queues() []QueueStat {
 	return ql
 }
 
+// HasQueue checks if the queue is present on the server.
+func (mSrv *MessageServer) HasQueue(queue string) bool {
+	mSrv.Lock()
+	defer mSrv.Unlock()
+
+	_, ok := mSrv.queues[queue]
+
+	return ok
+}
+
 // New creates a new Message Server and returns its pointer.
 //
 // New starts internal go-routine to catch ctx.Done() signal
@@ -93,7 +103,7 @@ func New(
 		Name: name,
 		log:  log}
 
-	log.Debugw("message Server created",
+	log.Debugw("message server created",
 		"mSrvID", ms.id,
 		"name", ms.Name)
 
@@ -122,29 +132,17 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 		"name", mSrv.Name)
 
 	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				mSrv.Lock()
+		<-ctx.Done()
 
-				for _, q := range mSrv.queues {
-					q.stop()
-				}
+		mSrv.Lock()
 
-				mSrv.runned = false
-				mSrv.ctx = context.Background()
+		mSrv.runned = false
 
-				mSrv.Unlock()
+		mSrv.Unlock()
 
-				mSrv.log.Infow("message server stopped",
-					"mSrvID", mSrv.id,
-					"name", mSrv.Name)
-
-				return
-			default:
-				continue
-			}
-		}
+		mSrv.log.Infow("message server stopped",
+			"mSrvID", mSrv.id,
+			"name", mSrv.Name)
 	}()
 }
 
@@ -174,7 +172,7 @@ func (mSrv *MessageServer) PutMessages(
 
 	_, ok := mSrv.queues[queue]
 	if !ok {
-		q, err := newQueue(uuid.New(), queue, mSrv.log)
+		q, err := newQueue(mSrv.ctx, uuid.New(), queue, mSrv.log)
 		if err != nil {
 			mSrv.log.Errorw("couldn't put messages",
 				"queue", queue,
@@ -225,4 +223,69 @@ func (mSrv *MessageServer) GetMessages(
 	mSrv.log.Debugw("getting messages", "queue", q.name)
 
 	return q.getMessages(mSrv.ctx, receiver, fromBegin)
+}
+
+// WaitForQueue checks if a queue is present.
+//
+// if there queue name is empty or if the server isn't runned
+// then nil, error will be returned
+//
+// WaitForQueue returned result channel. The time of waiting is
+// controlled outside the WaitForQueue over the context.
+//
+// If the queue appears while waiting time the channel got true.
+// If timeout is exceeded the false will put into the channel
+//
+// For example, if it's needed to wait for queue appears no more
+// than 2 seconds, the context should be created as followed:
+//    wCtx, wCancel := context.WithDeadline(ctx, time.Now().Add(2 * time.Second))
+//	  defer wCancel
+//
+//    wCh, err := mSrv.WaitForQueue(wCtx, "queue_name")
+//    if err != nil {
+//       panic(err.Error())
+//    }
+//
+//    res := <-wCh
+//    close(wCh)
+//
+//    if !res {
+//       // do compensation
+//    }
+//
+//    // do actual things (i.e. GetMessages)
+//
+func (mSrv *MessageServer) WaitForQueue(
+	ctx context.Context,
+	queue string) (chan bool, error) {
+	if !mSrv.IsRunned() {
+		return nil, fmt.Errorf("server isn't running")
+	}
+
+	if queue == "" {
+		return nil, fmt.Errorf("queue name is empty")
+	}
+
+	wCh := make(chan bool, 1)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				wCh <- false
+
+				return
+
+			default:
+				if mSrv.HasQueue(queue) {
+					wCh <- true
+
+					return
+				}
+			}
+		}
+	}()
+
+	return wCh, nil
+
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -64,6 +65,34 @@ func TestMSrv(t *testing.T) {
 		is.Equal(mm[i].key, m.Key)
 		is.True(bytes.Equal([]byte(mm[i].val), m.Data()))
 	}
+
+	t.Run("wait_for_queue testing", func(t *testing.T) {
+		// invalid queue name
+		ch, err := ms.WaitForQueue(ctx, "")
+		is.True(ch == nil && err != nil)
+
+		// existed queue name
+		ch, err = ms.WaitForQueue(ctx, qn)
+		is.True(ch != nil && err == nil)
+		is.True(<-ch == true)
+		close(ch)
+
+		// non-existed queue name
+		qn1 := "non-existed queue"
+		wCtx, wCancel := context.WithDeadline(ctx,
+			time.Now().Add(2*time.Second))
+		defer wCancel()
+		ch, err = ms.WaitForQueue(
+			wCtx,
+			qn1)
+
+		is.True(ch != nil && err == nil)
+		is.True(!<-ch)
+		close(ch)
+
+		// fmt.Println("---> waiting result :", found)
+		is.True(!ms.HasQueue(qn1))
+	})
 
 	// get queue stats
 	qs := ms.Queues()
