@@ -40,13 +40,34 @@ If it's needed to put parameters into the Service then functor model could be us
         return ServiceFunc(complexService), nil
     }
 
+In case the Service should keep state or there is necessity in complex data and logic, the standard model `struct + methods` could be used.
+
+    type newService struct {
+
+        //...
+
+    } 
+
+    func (ns *newService) Run(ctx context.Context) error {
+
+        //
+
+        return nil
+    }
+
+    func NewService(ctx context.Context, 
+        params ...ServiceParam) (ServiceRunner, error) {
+
+        ns := new(newService)
+
+        // initialize data structure and service
+
+        return ns, nil
+    }
+
 Some services could be stopped and resumed. These services should provide stop channel stopCh during their registration over AddService. This channel is used to tell to the Service that it should stop. To stop service the ServiceServer send struct{} into it.
 
-To resume the Service its method Run is called again. The channel could be also be used to send another information into the running service. 
-
-This model makes it possible to create streaming services.
-
-Services, which don't provide such channel cannot be stopped and resumed.
+To resume the Service its Run method shoul be called again. This model makes it possible to create streaming services. Services, which don't provide such channel cannot be stopped and resumed.
 
 ## Run and Stop the ServiceServer
 
@@ -76,7 +97,7 @@ If the Service is not started after registration it could be started by `ExecSer
 
 As it was mentioned earlier, only services with stopChannel could be stopped and resumed. The ServiceServer sends `struct{}` into the channel to indicate the Service should stop. Service ends it work and return `nil` from its `Run` method.
 
-To resume service the ServiceServer runs it `Run` method. If something should be sent into the Service from outside, before calling ResumeService the caller should send additional information through the channel.
+To resume service the ServiceServer runs it `Run` method. If something should be sent into the Service from outside, it might be done over the different channel or the Service data struct method before calling `ResumeService`.
 
 ### Wait for service
 

@@ -24,7 +24,7 @@ func MustServiceRunner(s ServiceRunner, err error) ServiceRunner {
 
 // new.....Service has common signature
 //   func(ctx context.Context,
-//        params ...serviceParams) (ServiceRunner, error)
+//        params ...serviceParam) (ServiceRunner, error)
 //
 // the context used here is different from the one used on service
 // execution. The context is only used in case there is long
@@ -33,7 +33,7 @@ func MustServiceRunner(s ServiceRunner, err error) ServiceRunner {
 
 // =============================================================================
 //    Output Service
-
+//
 // NewOutputService returns an output ServiceFunc which
 // puts all values form vl into io.Writer w.
 func NewOutputService(
@@ -55,7 +55,7 @@ func NewOutputService(
 
 // =============================================================================
 //    Put Messages Service
-
+//
 // NewPutMessagesService returns ServiceFunc which puts all messages msgs into
 // the queue 'queue' on Message Server mSrv.
 func NewPutMessagesService(
@@ -83,7 +83,7 @@ func NewPutMessagesService(
 
 // =============================================================================
 //      Get Messages Service
-
+//
 // newGetMessagesService creates a ServiceFunc which reads all
 // available messaes into channel mesCh.
 func NewGetMessagesService(

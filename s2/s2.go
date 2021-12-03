@@ -50,7 +50,7 @@ type serviceRecord struct {
 	svc         ServiceRunner
 	state       svcState
 	lastError   error
-	stopChannel chan interface{}
+	stopChannel chan struct{}
 }
 
 // svcState presents current Service state.
@@ -274,7 +274,7 @@ func (sSrv *ServiceServer) Run(ctx context.Context) error {
 func (sSrv *ServiceServer) AddService(
 	name string,
 	s ServiceRunner,
-	stopCh chan interface{},
+	stopCh chan struct{},
 	startImmediately bool) (uuid.UUID, error) {
 	if s == nil {
 		return uuid.Nil, fmt.Errorf("couldn't register nil-service")
