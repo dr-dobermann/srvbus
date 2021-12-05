@@ -21,7 +21,7 @@ type MessageEnvelope struct {
 func (me MessageEnvelope) String() string {
 	return fmt.Sprintf("MessageEnvelope(id : %v, registered at: %v from : %s "+
 		"[key : \"%s\", value : \"%s\"])",
-		me.id, me.Registered, me.Sender, me.Key, string(me.data))
+		me.ID, me.Registered, me.Sender, me.Name, string(me.Data()))
 }
 
 // msgRegRequest is used for message registration on server.
@@ -125,8 +125,8 @@ func (q *mQueue) loop(ctx context.Context) {
 
 			q.log.Debugw("message registered",
 				"queue", q.name,
-				"msgID", me.id,
-				"key", me.Key)
+				"msgID", me.Name,
+				"key", me.Name)
 
 		case mReq := <-q.mReqCh:
 			q.log.Debugw("got messages request",
@@ -247,8 +247,8 @@ func (q *mQueue) putMessages(
 		case q.regCh <- msgRegRequest{sender: sender, msg: m}:
 			q.log.Debugw("message registration request sent",
 				"queue", q.name,
-				"msgID", m.id,
-				"key", m.Key)
+				"msgID", m.ID,
+				"key", m.Name)
 		}
 	}
 
@@ -306,8 +306,8 @@ func (q *mQueue) getMessages(
 			q.log.Debugw("read message",
 				"receiver", receiver,
 				"queue", q.name,
-				"msg ID", me.id,
-				"msd Key", me.Key)
+				"m 		ID", me.ID,
+				"msd Key", me.Name)
 
 			mes = append(mes, me)
 		}

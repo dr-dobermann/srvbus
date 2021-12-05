@@ -63,8 +63,9 @@ func main() {
 	svcPut, err := sSrv.AddService("Put service",
 		s2.MustServiceRunner(
 			s2.NewPutMessagesService(ctx, mSrv, qn, uuid.New(),
-				ms.GetMsg(uuid.New(),
-					"greeting", bytes.NewBufferString("Hello Dober!")))),
+				ms.MustMsg(
+					ms.NewMsg(uuid.New(),
+						"greeting", bytes.NewBufferString("Hello Dober!"))))),
 		nil, false)
 
 	if err != nil {

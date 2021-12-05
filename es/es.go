@@ -1,3 +1,16 @@
+// srvBus is a Service Providing Server developed to
+// support project GoBPM.
+//
+// (c) 2021, Ruslan Gabitov a.k.a. dr-dobermann.
+// Use of this source is governed by LGPL license that
+// can be found in the LICENSE file.
+//
+/*
+Package es is a part of the srvbus package. es consists of the
+in-memory Events Server implementation.
+
+Event Server provides the sub/pub model of the data exchange.
+*/
 package es
 
 import (

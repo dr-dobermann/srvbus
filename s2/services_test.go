@@ -62,17 +62,20 @@ func TestPutGetMessagesSvc(t *testing.T) {
 	t.Run("invalid_params:putMessages", func(t *testing.T) {
 		// no message server
 		_, err = NewPutMessagesService(ctx, nil, "queue", uuid.New(),
-			ms.GetMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!")))
+			ms.MustMsg(
+				ms.NewMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!"))))
 		is.True(err != nil)
 
 		// no queue
 		_, err := NewPutMessagesService(ctx, mSrv, "", uuid.New(),
-			ms.GetMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!")))
+			ms.MustMsg(
+				ms.NewMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!"))))
 		is.True(err != nil)
 
 		// no sender
 		_, err = NewPutMessagesService(ctx, mSrv, qn, uuid.Nil,
-			ms.GetMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!")))
+			ms.MustMsg(
+				ms.NewMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!"))))
 		is.True(err != nil)
 
 		// no messages
@@ -88,7 +91,8 @@ func TestPutGetMessagesSvc(t *testing.T) {
 		mSrv,
 		qn,
 		uuid.New(),
-		ms.GetMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!")))
+		ms.MustMsg(
+			ms.NewMsg(uuid.Nil, "Hello", bytes.NewBufferString("Dober!"))))
 	is.NoErr(err)
 	is.True(svcPut != nil)
 

@@ -30,9 +30,9 @@ func TestMSrv(t *testing.T) {
 	ms.Run(ctx)
 
 	qn := "test_queue"
-	mm := []struct{ key, val string }{
-		{key: "key1", val: "Hello Dober!"},
-		{key: "key2", val: "Hello again Dober!"}}
+	mm := []struct{ name, val string }{
+		{name: "key1", val: "Hello Dober!"},
+		{name: "key2", val: "Hello again Dober!"}}
 
 	// put messages to the server
 	err = ms.PutMessages(
@@ -41,10 +41,11 @@ func TestMSrv(t *testing.T) {
 		func() (msgs []*Message) {
 			for _, m := range mm {
 				msgs = append(msgs,
-					GetMsg(
-						uuid.Nil,
-						m.key,
-						bytes.NewBufferString(m.val)))
+					MustMsg(
+						NewMsg(
+							uuid.Nil,
+							m.name,
+							bytes.NewBufferString(m.val))))
 			}
 
 			return
@@ -62,7 +63,7 @@ func TestMSrv(t *testing.T) {
 	is.Equal(len(mes), 2)
 
 	for i, m := range mes {
-		is.Equal(mm[i].key, m.Key)
+		is.Equal(mm[i].name, m.Name)
 		is.True(bytes.Equal([]byte(mm[i].val), m.Data()))
 	}
 

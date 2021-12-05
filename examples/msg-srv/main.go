@@ -31,10 +31,11 @@ func main() {
 	if err = mSrv.PutMessages(
 		uuid.New(),
 		qn,
-		ms.GetMsg(
-			uuid.Nil,
-			"greetings",
-			strings.NewReader("Hello Dober!"))); err != nil {
+		ms.MustMsg(
+			ms.NewMsg(
+				uuid.Nil,
+				"greetings",
+				strings.NewReader("Hello Dober!")))); err != nil {
 
 		panic("couldn't store messages : " + err.Error())
 	}
@@ -45,7 +46,7 @@ func main() {
 	}
 
 	for i, m := range mes {
-		fmt.Println("#", i+1, "msg has key:'", m.Key,
+		fmt.Println("#", i+1, "msg has key:'", m.Name,
 			"' and data:[", string(m.Data()),
 			"] received at", m.Registered,
 			"from", m.Sender)

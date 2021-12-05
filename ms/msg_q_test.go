@@ -78,7 +78,7 @@ func TestQueue(t *testing.T) {
 	var msgs []*Message
 	for _, m := range mm {
 		msgs = append(msgs,
-			GetMsg(uuid.Nil, m.key, bytes.NewBufferString(m.value)))
+			MustMsg(NewMsg(uuid.Nil, m.key, bytes.NewBufferString(m.value))))
 	}
 
 	err = q.putMessages(ctx, uuid.New(), msgs...)
@@ -96,7 +96,7 @@ func TestQueue(t *testing.T) {
 	is.Equal(len(mes), 2)
 
 	for i, m := range mes {
-		is.Equal(m.Key, mm[i].key)
+		is.Equal(m.Name, mm[i].key)
 		is.Equal(string(m.Data()), mm[i].value)
 	}
 
