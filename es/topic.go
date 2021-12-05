@@ -16,4 +16,6 @@ type EventEnvelope struct {
 type Topic struct {
 	name   string
 	events []EventEnvelope
+
+	subs map[uuid.UUID]chan EventEnvelope
 }

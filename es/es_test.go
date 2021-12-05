@@ -15,7 +15,7 @@ func TestEvntServer(t *testing.T) {
 	log, err := zap.NewDevelopment()
 	is.NoErr(err)
 
-	eSrv, err := New(uuid.Nil, "EventServer", log.Sugar())
+	eSrv, err := New(uuid.New(), "EventServer", log.Sugar())
 	is.NoErr(err)
 	is.True(eSrv != nil)
 

@@ -21,15 +21,55 @@ import (
 	"go.uber.org/zap"
 )
 
+// EventServer keeps the state of the event server.
 type EventServer struct {
+	ID   uuid.UUID
+	Name string
+
+	log *zap.SugaredLogger
+
+	topics map[string]*Topic
 }
 
-func New(id uuid.UUID, name string, log *zap.SugaredLogger) (*EventServer, error) {
+// Creates a new EventServer.
+func New(
+	id uuid.UUID,
+	name string,
+	log *zap.SugaredLogger) (*EventServer, error) {
+
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+
+	if name == "" {
+		name = "EventServer #" + id.String()
+	}
+	if log == nil {
+		return nil,
+			fmt.Errorf("log is absent for serverv %s # %v",
+				name, id)
+	}
+
 	es := new(EventServer)
+	es.Name = name
+	es.ID = id
+	es.log = log
+	es.topics = make(map[string]*Topic)
+
+	es.log.Infow("event server created",
+		"eSrvID", es.ID,
+		"name", es.Name)
 
 	return es, nil
 }
 
+// Run starts the EventServer.
+//
+// To stope server use context's cancel function.
 func (eSrv *EventServer) Run(ctx context.Context) error {
+	eSrv.log.Infow("event server started",
+		"eSrvID", eSrv.ID,
+		"name", eSrv.Name)
+
 	return fmt.Errorf("not implemented yet")
 }
