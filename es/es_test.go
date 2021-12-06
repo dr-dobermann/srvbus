@@ -22,6 +22,6 @@ func TestEvntServer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err = eSrv.Run(ctx)
+	err = eSrv.Run(ctx, true)
 	is.NoErr(err)
 }
