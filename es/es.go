@@ -99,7 +99,8 @@ func (eSrv *EventServer) hasTopic(name string) (*Topic, bool) {
 	// parse topic
 	tt := []string{}
 	for _, t := range strings.Split(name, "/") {
-		if len(strings.Trim(t, " ")) != 0 {
+		t = strings.Trim(t, " ")
+		if len(t) != 0 {
 			tt = append(tt, t)
 		}
 	}
@@ -147,7 +148,8 @@ func (eSrv *EventServer) AddTopic(name string, baseTopic string) error {
 	// parse baseTopic
 	base := []string{}
 	for _, t := range strings.Split(baseTopic, "/") {
-		if len(strings.Trim(t, " ")) != 0 {
+		t = strings.Trim(t, " ")
+		if len(t) != 0 {
 			base = append(base, t)
 		}
 	}
@@ -183,6 +185,35 @@ func (eSrv *EventServer) AddTopic(name string, baseTopic string) error {
 	}
 
 	return t.addSubtopic(name, base[1:])
+}
+
+// AddTopicQueue add a whole branch of topics at once.
+func (eSrv *EventServer) AddTopicQueue(
+	topicsQueue string,
+	baseTopic string) error {
+
+	// check if there is base topic on the server
+	if !eSrv.HasTopic(baseTopic) {
+		return newESErr(eSrv, nil,
+			"no topic '%s'", baseTopic)
+	}
+
+	// parse the topicQueue
+	for _, t := range strings.Split(topicsQueue, "/") {
+		t = strings.Trim(t, " ")
+
+		// add every non-empty topic and update the
+		// baseTopic with it for the next one.
+		if len(t) > 0 {
+			if err := eSrv.AddTopic(t, baseTopic); err != nil {
+				return newESErr(eSrv, err,
+					"couldn't add topic '%s' to '%s'", t, baseTopic)
+			}
+			baseTopic += "/" + t
+		}
+	}
+
+	return nil
 }
 
 const (

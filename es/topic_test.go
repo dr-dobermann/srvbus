@@ -66,4 +66,8 @@ func TestTopicsTree(t *testing.T) {
 		// check empty topic
 		is.True(!eSrv.HasTopic("/"))
 	})
+
+	is.NoErr(eSrv.AddTopicQueue("st/sst/ssst", "/main/"))
+
+	is.True(eSrv.HasTopic("/main/st/sst/ssst/"))
 }
