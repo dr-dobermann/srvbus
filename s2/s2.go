@@ -314,8 +314,9 @@ func (sSrv *ServiceServer) AddService(
 func (sSrv *ServiceServer) ExecService(
 	id uuid.UUID) error {
 	sSrv.Lock()
+	defer sSrv.Unlock()
+
 	sr, ok := sSrv.services[id]
-	sSrv.Unlock()
 
 	if !ok {
 		sSrv.log.Errorw("service isn't found",

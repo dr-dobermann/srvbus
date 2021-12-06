@@ -19,6 +19,7 @@ type DataItem struct {
 func New(name string, buf []byte) *DataItem {
 	di := new(DataItem)
 	di.Name = name
+	di.data = make([]byte, len(buf))
 	copy(di.data, buf)
 
 	return di

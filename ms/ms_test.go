@@ -38,7 +38,8 @@ func TestMSrv(t *testing.T) {
 	err = ms.PutMessages(
 		uuid.New(),
 		qn,
-		func() (msgs []*Message) {
+		func() []*Message {
+			msgs := []*Message{}
 			for _, m := range mm {
 				msgs = append(msgs,
 					MustMsg(
@@ -48,7 +49,7 @@ func TestMSrv(t *testing.T) {
 							bytes.NewBufferString(m.val))))
 			}
 
-			return
+			return msgs
 		}()...)
 	is.NoErr(err)
 
