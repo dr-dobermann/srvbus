@@ -61,7 +61,7 @@ func NewMsg(id uuid.UUID, name string, r io.Reader) (*Message, error) {
 	}
 
 	return &Message{
-			DataItem: *ds.New(name, buf),
+			DataItem: *ds.NewItem(name, buf),
 			ID:       id},
 		nil
 }

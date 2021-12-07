@@ -15,6 +15,22 @@ type EventEnvelope struct {
 	regAt     time.Time
 }
 
+// subscription keeps status for one Subscriber.
+type subscription struct {
+	// subscriber id
+	id uuid.UUID
+
+	// subscription request
+	subReq string
+
+	// channel for subscribed topics
+	eCh chan EventEnvelope
+
+	// last readed index
+	lastReaded map[string]int
+}
+
+// Topic keep state of a single topic.
 type Topic struct {
 	sync.Mutex
 
@@ -34,7 +50,7 @@ type Topic struct {
 	subtopics map[string]*Topic
 
 	// subscribers for the queue
-	subs map[uuid.UUID]chan EventEnvelope
+	subs map[uuid.UUID]subscription
 }
 
 // addSubtopic adds a new subtopic if there is no duplicates.
@@ -63,8 +79,7 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 			name:      name,
 			events:    []EventEnvelope{},
 			subtopics: map[string]*Topic{},
-			subs:      map[uuid.UUID]chan EventEnvelope{},
-		}
+			subs:      map[uuid.UUID]subscription{}}
 
 		t.eServer.log.Debugw("subtopic added",
 			"eSrvID", t.eServer.ID,
@@ -86,6 +101,10 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 	return st.addSubtopic(name, base[1:])
 }
 
+// hasSubtopic checks if topics are existed in the topic.
+//
+// if the given topics has subtopics, they would be checked
+// over recursive calls of its hasSubtopic.
 func (t *Topic) hasSubtopic(topics []string) (*Topic, bool) {
 	t.Lock()
 	defer t.Unlock()

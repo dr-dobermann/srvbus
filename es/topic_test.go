@@ -54,6 +54,9 @@ func TestTopicsTree(t *testing.T) {
 		// add to invalid tree
 		is.True(eSrv.AddTopic("subtopic", "/mani") != nil)
 
+		// check adding with invalid subtopic
+		is.True(eSrv.AddTopic("sstopic", "/main/ssubtopic") != nil)
+
 		// check invalide root topic
 		is.True(!eSrv.HasTopic("mani"))
 
@@ -70,4 +73,8 @@ func TestTopicsTree(t *testing.T) {
 	// check topics branch adding
 	is.NoErr(eSrv.AddTopicQueue("st/sst/ssst", "/main/"))
 	is.True(eSrv.HasTopic("/main/st/sst/ssst/"))
+	// duplicate topic
+	is.True(eSrv.AddTopicQueue("ssst/sssst", "/main/st/sst") != nil)
+	// no branch
+	is.True(eSrv.AddTopicQueue("ssst/sssst", "/main/sst") != nil)
 }

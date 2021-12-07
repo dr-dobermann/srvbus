@@ -137,7 +137,7 @@ func (eSrv *EventServer) hasTopic(name string) (*Topic, bool) {
 // isn't '/' then it assumed as the first topic from the root
 // "topic" == "/topic".
 //
-// Topics could be added even when the EventServer is not running
+// Topics could be added even when the EventServer is not running,
 // but if it runs with cleanStart == true !!!ALL TOPICS WILL BE LOST!!!
 //
 func (eSrv *EventServer) AddTopic(name string, branch string) error {
@@ -172,8 +172,7 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			name:      name,
 			events:    []EventEnvelope{},
 			subtopics: map[string]*Topic{},
-			subs:      map[uuid.UUID]chan EventEnvelope{},
-		}
+			subs:      map[uuid.UUID]subscription{}}
 
 		eSrv.log.Debugw("topic added to root",
 			"eSrvID", eSrv.ID,
@@ -201,7 +200,8 @@ func (eSrv *EventServer) AddTopicQueue(
 	branch string) error {
 
 	// check if there is base topic on the server
-	if !eSrv.HasTopic(branch) {
+	branch = strings.Trim(branch, " ")
+	if branch != "" && branch != "/" && !eSrv.HasTopic(branch) {
 		return newESErr(eSrv, nil,
 			"no topic '%s'", branch)
 	}
@@ -224,8 +224,25 @@ func (eSrv *EventServer) AddTopicQueue(
 	return nil
 }
 
+// AddEvent add an Event into the topic.
+func (eSrv *EventServer) AddEvent(
+	topic string,
+	evt *Event,
+	sender uuid.UUID) error {
+
+	if !eSrv.IsRunned() {
+		return newESErr(eSrv, nil, "couldn't add event on not-runned server")
+	}
+
+	if sender == uuid.Nil {
+		return newESErr(eSrv, nil, "no sender for Event '%s'", evt.Name)
+	}
+
+	return nil
+}
+
 const (
-	default_topic = "server"
+	default_topic = "/server"
 )
 
 // Creates a new EventServer.
@@ -253,6 +270,10 @@ func New(
 	eSrv.log = log
 	eSrv.topics = make(map[string]*Topic)
 
+	eSrv.log.Infow("event server created",
+		"eSrvID", eSrv.ID,
+		"name", eSrv.Name)
+
 	// add server's default topic
 	if err := eSrv.AddTopic(default_topic, "/"); err != nil {
 		return nil,
@@ -261,10 +282,6 @@ func New(
 				err,
 				"couldn't add default topic '%s'", default_topic)
 	}
-
-	eSrv.log.Infow("event server created",
-		"eSrvID", eSrv.ID,
-		"name", eSrv.Name)
 
 	return eSrv, nil
 }
@@ -276,6 +293,13 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 	if eSrv.IsRunned() {
 		return newESErr(eSrv, nil, "server already started")
 	}
+
+	eSrv.log.Infow("event server is starting...",
+		"eSrvID", eSrv.ID,
+		"name", eSrv.Name,
+		"cleanStart", cleanStart)
+
+	eSrv.runned = true
 
 	// create new topics table or clean it if needed
 	if cleanStart {

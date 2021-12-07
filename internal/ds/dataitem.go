@@ -16,7 +16,7 @@ type DataItem struct {
 }
 
 // New creates a new DataItem with given name and data.
-func New(name string, buf []byte) *DataItem {
+func NewItem(name string, buf []byte) *DataItem {
 	di := new(DataItem)
 	di.Name = name
 	di.data = make([]byte, len(buf))
