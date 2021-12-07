@@ -2,6 +2,7 @@ package es
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"testing"
@@ -23,6 +24,8 @@ func TestEvents(t *testing.T) {
 	is.NoErr(err)
 	is.True(evt1 != nil)
 	is.Equal(evt1.Name, "Event2")
+
+	fmt.Println(evt.String())
 
 	buf, err := ioutil.ReadAll(evt1)
 	if err != nil && err != io.EOF {

@@ -17,6 +17,11 @@ type Event struct {
 	At time.Time
 }
 
+func (e *Event) String() string {
+	return fmt.Sprintf("Evt '%s' @ %v [%s]",
+		e.Name, e.At, string(e.Data()))
+}
+
 // MustEvent checks if there is no error while the Event creation.
 // If any, then panic fired.
 func MustEvent(evt *Event, err error) *Event {
