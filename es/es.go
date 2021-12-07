@@ -114,7 +114,7 @@ func (eSrv *EventServer) hasTopic(name string) (*Topic, bool) {
 	defer eSrv.Unlock()
 
 	// if the first topic isn't exist on the eSrv return false
-	t, ok := eSrv.topics[tt[0]]
+	t, ok := eSrv.topics[update2Absolute(tt[0])]
 	if !ok {
 		return nil, false
 	}
@@ -130,24 +130,25 @@ func (eSrv *EventServer) hasTopic(name string) (*Topic, bool) {
 
 // AddTopic adds a new topic `name` into the EventServer topic tree.
 //
-// baseTopic consist of list of topics which are over the new one.
+// branch consist of list of topics which are over the new one.
 // It looks like "topic\subtopic\subsubtopic". If the new topic
-// should be on the root of the EventServer, then its baseTopic == "/".
-// There is only absolute topic's path if the first letter of the baseTopic
+// should be on the root of the EventServer, then its branch == "/".
+// There is only absolute topic's path if the first letter of the branch
 // isn't '/' then it assumed as the first topic from the root
 // "topic" == "/topic".
 //
 // Topics could be added even when the EventServer is not running
 // but if it runs with cleanStart == true !!!ALL TOPICS WILL BE LOST!!!
 //
-func (eSrv *EventServer) AddTopic(name string, baseTopic string) error {
+func (eSrv *EventServer) AddTopic(name string, branch string) error {
+	name = strings.Trim(name, " ")
 	if name == "" {
 		return newESErr(eSrv, nil, "empty topic name is not allowed")
 	}
 
-	// parse baseTopic
+	// parse branch
 	base := []string{}
-	for _, t := range strings.Split(baseTopic, "/") {
+	for _, t := range strings.Split(branch, "/") {
 		t = strings.Trim(t, " ")
 		if len(t) != 0 {
 			base = append(base, t)
@@ -159,13 +160,14 @@ func (eSrv *EventServer) AddTopic(name string, baseTopic string) error {
 
 	// if baseTopis is root, add it to eSrv.topics
 	if len(base) == 0 {
+		name = update2Absolute(name)
 		// check for duplicates on eSrv
 		if _, ok := eSrv.topics[name]; ok {
 			return newESErr(eSrv, nil, "topic '%s' already exists", name)
 		}
 
 		eSrv.topics[name] = &Topic{
-			eSrver:    eSrv,
+			eServer:   eSrv,
 			fullName:  name,
 			name:      name,
 			events:    []EventEnvelope{},
@@ -173,12 +175,18 @@ func (eSrv *EventServer) AddTopic(name string, baseTopic string) error {
 			subs:      map[uuid.UUID]chan EventEnvelope{},
 		}
 
+		eSrv.log.Debugw("topic added to root",
+			"eSrvID", eSrv.ID,
+			"eSrvName", eSrv.Name,
+			"topic", name)
+
 		return nil
 	}
 
 	// if there is topic in eSrv.topics which is the first
-	// topic in baseTopic then call it addSubtopic method
-	// for it and send to it all baseTopics slices except the first one.
+	// topic in branch then call it addSubtopic method
+	// for it and send to it all branchs slices except the first one.
+	base[0] = update2Absolute(base[0])
 	t, ok := eSrv.topics[base[0]]
 	if !ok {
 		return newESErr(eSrv, nil, "no '%s' topic on server", base[0])
@@ -190,12 +198,12 @@ func (eSrv *EventServer) AddTopic(name string, baseTopic string) error {
 // AddTopicQueue add a whole branch of topics at once.
 func (eSrv *EventServer) AddTopicQueue(
 	topicsQueue string,
-	baseTopic string) error {
+	branch string) error {
 
 	// check if there is base topic on the server
-	if !eSrv.HasTopic(baseTopic) {
+	if !eSrv.HasTopic(branch) {
 		return newESErr(eSrv, nil,
-			"no topic '%s'", baseTopic)
+			"no topic '%s'", branch)
 	}
 
 	// parse the topicQueue
@@ -203,13 +211,13 @@ func (eSrv *EventServer) AddTopicQueue(
 		t = strings.Trim(t, " ")
 
 		// add every non-empty topic and update the
-		// baseTopic with it for the next one.
+		// branch with it for the next one.
 		if len(t) > 0 {
-			if err := eSrv.AddTopic(t, baseTopic); err != nil {
+			if err := eSrv.AddTopic(t, branch); err != nil {
 				return newESErr(eSrv, err,
-					"couldn't add topic '%s' to '%s'", t, baseTopic)
+					"couldn't add topic '%s' to '%s'", t, branch)
 			}
-			baseTopic += "/" + t
+			branch += "/" + t
 		}
 	}
 

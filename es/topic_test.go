@@ -30,7 +30,7 @@ func TestTopicsTree(t *testing.T) {
 	err := eSrv.AddTopic("main", "")
 	is.NoErr(err)
 
-	is.True(eSrv.HasTopic("main"))
+	is.True(eSrv.HasTopic("/main"))
 
 	is.NoErr(eSrv.AddTopic("subtopic", "/main"))
 
@@ -67,7 +67,7 @@ func TestTopicsTree(t *testing.T) {
 		is.True(!eSrv.HasTopic("/"))
 	})
 
+	// check topics branch adding
 	is.NoErr(eSrv.AddTopicQueue("st/sst/ssst", "/main/"))
-
 	is.True(eSrv.HasTopic("/main/st/sst/ssst/"))
 }
