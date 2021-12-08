@@ -177,7 +177,7 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			events:    []EventEnvelope{},
 			subtopics: map[string]*Topic{},
 			inCh:      make(chan EventEnvelope),
-			subs:      map[uuid.UUID]subscription{}}
+			subs:      map[uuid.UUID]*subscription{}}
 
 		eSrv.topics[name] = nt
 
@@ -186,6 +186,7 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			"eSrvName", eSrv.Name,
 			"topic", name)
 
+		// if server is runned, run the topic too
 		if eSrv.runned {
 			nt.run(eSrv.ctx)
 		}
@@ -261,17 +262,17 @@ func (eSrv *EventServer) AddEvent(
 		return newESErr(eSrv, nil, "no topic '%s' on server", topic)
 	}
 
-	go func() {
-		ee := &EventEnvelope{
-			event:     evt,
-			topic:     topic,
-			publisher: sender}
+	ee := EventEnvelope{
+		event:     evt,
+		Topic:     topic,
+		Publisher: sender}
 
+	go func() {
 		select {
 		case <-eSrv.ctx.Done():
 			return
 
-		case t.inCh <- *ee:
+		case t.inCh <- ee:
 		}
 	}()
 
@@ -359,6 +360,7 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 			"eSrvID", eSrv.ID,
 			"eSrvName", eSrv.Name,
 			"err", ctx.Err())
+
 	}()
 
 	eSrv.ctx = ctx

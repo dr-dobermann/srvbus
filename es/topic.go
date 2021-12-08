@@ -12,9 +12,18 @@ import (
 type EventEnvelope struct {
 	event *Event
 
-	topic     string
-	publisher uuid.UUID
-	regAt     time.Time
+	Topic     string
+	Publisher uuid.UUID
+	RegAt     time.Time
+
+	// event index in the topic storage
+	Index int
+}
+
+//
+type eventFilter struct {
+	name string
+	data string
 }
 
 // subscription keeps status for one Subscriber.
@@ -30,8 +39,22 @@ type subscription struct {
 	// channel for subscribed topics
 	eCh chan EventEnvelope
 
-	// last readed index for the every single topic
+	// last readed index of event in the related topic
+	//
+	// it used only if filterCond is not set (!nil)
 	lastReaded int
+
+	// event filter
+	filterCond *eventFilter
+}
+
+// filter checks if the event comply to filterConditions.
+//
+// if checking passed, filter returns given EventEnvelope
+// and nil otherwise.
+func (s *subscription) filter(ee *EventEnvelope) *EventEnvelope {
+
+	return ee
 }
 
 // Topic keep state of a single topic.
@@ -57,7 +80,7 @@ type Topic struct {
 	inCh chan EventEnvelope
 
 	// subscribers for the queue
-	subs map[uuid.UUID]subscription
+	subs map[uuid.UUID]*subscription
 
 	// running flag
 	runned bool
@@ -101,7 +124,7 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 			events:    []EventEnvelope{},
 			subtopics: map[string]*Topic{},
 			inCh:      make(chan EventEnvelope),
-			subs:      map[uuid.UUID]subscription{}}
+			subs:      map[uuid.UUID]*subscription{}}
 		t.subtopics[name] = nt
 
 		if t.runned {
@@ -196,6 +219,7 @@ func (t *Topic) run(ctx context.Context) {
 
 				return
 
+			// register the event
 			case ee := <-t.inCh:
 				if ee.event == nil {
 					t.eServer.log.Warnw("got empty event in envelope",
@@ -206,21 +230,21 @@ func (t *Topic) run(ctx context.Context) {
 					continue
 				}
 
-				if ee.publisher == uuid.Nil {
+				if ee.Publisher == uuid.Nil {
 					t.eServer.log.Warnw("event has no publisher id",
 						"eSrvID", t.eServer.ID,
 						"eSrvName", t.eServer.Name,
 						"topic", t.fullName,
-						"publisher", ee.publisher,
 						"event", ee.event.String())
 
 					continue
 				}
 
-				ee.topic = t.fullName
-				ee.regAt = time.Now()
+				ee.RegAt = time.Now()
 
 				t.Lock()
+				pos := len(t.events)
+				ee.Index = pos
 				t.events = append(t.events, ee)
 				t.Unlock()
 
@@ -230,14 +254,67 @@ func (t *Topic) run(ctx context.Context) {
 					"topic", t.fullName,
 					"evtName", ee.event.Name)
 
-				go t.updateSubs()
+				// send event for subscribers
+				go t.updateSubs(ctx, &ee, pos)
 			}
 		}
 	}()
 }
 
-func (t *Topic) updateSubs() {
+// updateSubs sends all the subscribers a single EventEnvelope.
+func (t *Topic) updateSubs(ctx context.Context, ee *EventEnvelope, pos int) {
+	t.Lock()
+	defer t.Unlock()
 
+	for _, s := range t.subs {
+
+		s := s
+
+		go func() {
+			// check if there is a filter and event comply its conditions.
+			if s.filterCond != nil {
+				if ee = s.filter(ee); ee != nil {
+					// try to send event or stop on context's cancel
+					select {
+					case s.eCh <- *ee:
+					case <-ctx.Done():
+					}
+				}
+
+				return
+			}
+
+			for {
+				// check context cancelling
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				s.Lock()
+				// if sender wants to get first event in the t.events
+				//
+				// or
+				//
+				// wait until sender accepts all the previous events
+				// and then send the event into the output channel
+				if (s.lastReaded == 0 && pos == 0) ||
+					(s.lastReaded+1 == pos) {
+					s.eCh <- *ee
+
+					// set lastRead according to event position in
+					// the t.events
+					s.lastReaded = pos
+					s.Unlock()
+
+					return
+				}
+
+				s.Unlock()
+			}
+		}()
+	}
 }
 
 // -----------------------------------------------------------------------------
