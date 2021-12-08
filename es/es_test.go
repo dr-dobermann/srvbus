@@ -3,6 +3,7 @@ package es
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -34,7 +35,6 @@ func TestAddingEvents(t *testing.T) {
 	is.True(eSrv != nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// add event on non-runned server
 	is.True(
@@ -46,14 +46,31 @@ func TestAddingEvents(t *testing.T) {
 
 	is.NoErr(eSrv.AddTopicQueue("/main/subtopic/subsubtopic", "/"))
 
+	// empty event registration
+	is.True(
+		eSrv.AddEvent("/main",
+			nil,
+			uuid.New()) != nil)
+
 	// event with no sender
 	is.True(
 		eSrv.AddEvent("/main",
 			MustEvent(NewEventWithString("test_event", "test_event fired")),
 			uuid.Nil) != nil)
 
-	is.NoErr(
-		eSrv.AddEvent("/main",
+	// event with invalid topic
+	is.True(
+		eSrv.AddEvent("/mani",
 			MustEvent(NewEventWithString("test_event", "test_event fired")),
-			uuid.New()))
+			uuid.Nil) != nil)
+
+	err := eSrv.AddEvent("/main",
+		MustEvent(NewEventWithString("good_test_event",
+			"good_test_event fired")),
+		uuid.New())
+	is.NoErr(err)
+
+	// check if the event is in
+
+	time.AfterFunc(5*time.Second, cancel)
 }

@@ -1,6 +1,7 @@
 package es
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"time"
@@ -11,14 +12,17 @@ import (
 type EventEnvelope struct {
 	event *Event
 
+	topic     string
 	publisher uuid.UUID
 	regAt     time.Time
 }
 
 // subscription keeps status for one Subscriber.
 type subscription struct {
+	sync.Mutex
+
 	// subscriber id
-	id uuid.UUID
+	subscriber uuid.UUID
 
 	// subscription request
 	subReq string
@@ -26,8 +30,8 @@ type subscription struct {
 	// channel for subscribed topics
 	eCh chan EventEnvelope
 
-	// last readed index
-	lastReaded map[string]int
+	// last readed index for the every single topic
+	lastReaded int
 }
 
 // Topic keep state of a single topic.
@@ -49,8 +53,25 @@ type Topic struct {
 	// nested subtopics
 	subtopics map[string]*Topic
 
+	// incoming channel
+	inCh chan EventEnvelope
+
 	// subscribers for the queue
 	subs map[uuid.UUID]subscription
+
+	// running flag
+	runned bool
+
+	// runned context
+	ctx context.Context
+}
+
+// isRunned returns the running status of the topic
+func (t *Topic) isRunned() bool {
+	t.Lock()
+	defer t.Unlock()
+
+	return t.runned
 }
 
 // addSubtopic adds a new subtopic if there is no duplicates.
@@ -73,13 +94,19 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 				t.fullName, name)
 		}
 
-		t.subtopics[name] = &Topic{
+		nt := &Topic{
 			eServer:   t.eServer,
 			fullName:  t.fullName + "/" + name,
 			name:      name,
 			events:    []EventEnvelope{},
 			subtopics: map[string]*Topic{},
+			inCh:      make(chan EventEnvelope),
 			subs:      map[uuid.UUID]subscription{}}
+		t.subtopics[name] = nt
+
+		if t.runned {
+			nt.run(t.ctx)
+		}
 
 		t.eServer.log.Debugw("subtopic added",
 			"eSrvID", t.eServer.ID,
@@ -122,6 +149,99 @@ func (t *Topic) hasSubtopic(topics []string) (*Topic, bool) {
 
 	return st, true
 }
+
+// run starts topic execution
+func (t *Topic) run(ctx context.Context) {
+	if t.isRunned() {
+		t.eServer.log.Warnw("topic already runned",
+			"eSrvID", t.eServer.ID,
+			"eSrvName", t.eServer.Name,
+			"topic", t.fullName)
+
+		return
+	}
+
+	t.Lock()
+	t.runned = true
+	t.ctx = ctx
+	t.Unlock()
+
+	t.eServer.log.Debugw("topic execution started...",
+		"eSrvID", t.eServer.ID,
+		"eSrvName", t.eServer.Name,
+		"topic", t.fullName)
+
+	// start all subtopics
+	go func() {
+		t.Lock()
+		defer t.Unlock()
+
+		for _, st := range t.subtopics {
+			st.run(ctx)
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				t.Lock()
+				t.runned = false
+				t.Unlock()
+
+				t.eServer.log.Debugw("topic execution stopped",
+					"eSrvID", t.eServer.ID,
+					"eSrvName", t.eServer.Name,
+					"topic", t.fullName)
+
+				return
+
+			case ee := <-t.inCh:
+				if ee.event == nil {
+					t.eServer.log.Warnw("got empty event in envelope",
+						"eSrvID", t.eServer.ID,
+						"eSrvName", t.eServer.Name,
+						"topic", t.fullName)
+
+					continue
+				}
+
+				if ee.publisher == uuid.Nil {
+					t.eServer.log.Warnw("event has no publisher id",
+						"eSrvID", t.eServer.ID,
+						"eSrvName", t.eServer.Name,
+						"topic", t.fullName,
+						"publisher", ee.publisher,
+						"event", ee.event.String())
+
+					continue
+				}
+
+				ee.topic = t.fullName
+				ee.regAt = time.Now()
+
+				t.Lock()
+				t.events = append(t.events, ee)
+				t.Unlock()
+
+				t.eServer.log.Debugw("new event registered",
+					"eSrvID", t.eServer.ID,
+					"eSrvName", t.eServer.Name,
+					"topic", t.fullName,
+					"evtName", ee.event.Name)
+
+				go t.updateSubs()
+			}
+		}
+	}()
+}
+
+func (t *Topic) updateSubs() {
+
+}
+
+// -----------------------------------------------------------------------------
+//                    Service functions
 
 // update2Absolute makes the path absolute by adding
 // '/' at the begin of the path.

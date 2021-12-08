@@ -63,7 +63,11 @@ type EventServer struct {
 
 	topics map[string]*Topic
 
+	// running flag
 	runned bool
+
+	// running context
+	ctx context.Context
 }
 
 // Logger returns a pointer to the internal logger of
@@ -166,18 +170,25 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			return newESErr(eSrv, nil, "topic '%s' already exists", name)
 		}
 
-		eSrv.topics[name] = &Topic{
+		nt := &Topic{
 			eServer:   eSrv,
 			fullName:  name,
 			name:      name,
 			events:    []EventEnvelope{},
 			subtopics: map[string]*Topic{},
+			inCh:      make(chan EventEnvelope),
 			subs:      map[uuid.UUID]subscription{}}
+
+		eSrv.topics[name] = nt
 
 		eSrv.log.Debugw("topic added to root",
 			"eSrvID", eSrv.ID,
 			"eSrvName", eSrv.Name,
 			"topic", name)
+
+		if eSrv.runned {
+			nt.run(eSrv.ctx)
+		}
 
 		return nil
 	}
@@ -225,6 +236,8 @@ func (eSrv *EventServer) AddTopicQueue(
 }
 
 // AddEvent add an Event into the topic.
+//
+// AddEvent doesn't support the event sequental order.
 func (eSrv *EventServer) AddEvent(
 	topic string,
 	evt *Event,
@@ -234,9 +247,33 @@ func (eSrv *EventServer) AddEvent(
 		return newESErr(eSrv, nil, "couldn't add event on not-runned server")
 	}
 
+	if evt == nil {
+		return newESErr(eSrv, nil, "empty event registration")
+	}
+
 	if sender == uuid.Nil {
 		return newESErr(eSrv, nil, "no sender for Event '%s'", evt.Name)
 	}
+
+	t, found := eSrv.hasTopic(topic)
+
+	if !found {
+		return newESErr(eSrv, nil, "no topic '%s' on server", topic)
+	}
+
+	go func() {
+		ee := &EventEnvelope{
+			event:     evt,
+			topic:     topic,
+			publisher: sender}
+
+		select {
+		case <-eSrv.ctx.Done():
+			return
+
+		case t.inCh <- *ee:
+		}
+	}()
 
 	return nil
 }
@@ -272,7 +309,7 @@ func New(
 
 	eSrv.log.Infow("event server created",
 		"eSrvID", eSrv.ID,
-		"name", eSrv.Name)
+		"eSrvName", eSrv.Name)
 
 	// add server's default topic
 	if err := eSrv.AddTopic(default_topic, "/"); err != nil {
@@ -296,10 +333,8 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 
 	eSrv.log.Infow("event server is starting...",
 		"eSrvID", eSrv.ID,
-		"name", eSrv.Name,
+		"eSrvName", eSrv.Name,
 		"cleanStart", cleanStart)
-
-	eSrv.runned = true
 
 	// create new topics table or clean it if needed
 	if cleanStart {
@@ -314,9 +349,29 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 		}
 	}
 
+	go func() {
+		<-ctx.Done()
+		eSrv.Lock()
+		eSrv.runned = false
+		eSrv.Unlock()
+
+		eSrv.log.Infow("event server stopped",
+			"eSrvID", eSrv.ID,
+			"eSrvName", eSrv.Name,
+			"err", ctx.Err())
+	}()
+
+	eSrv.ctx = ctx
+	eSrv.runned = true
+
+	// run all topics
+	for _, t := range eSrv.topics {
+		t.run(ctx)
+	}
+
 	eSrv.log.Infow("event server started",
 		"eSrvID", eSrv.ID,
-		"name", eSrv.Name)
+		"eSrvName", eSrv.Name)
 
 	return nil
 }

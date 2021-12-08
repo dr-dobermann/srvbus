@@ -64,8 +64,6 @@ func NewEventWithString(name string, data string) (*Event, error) {
 		return nil, fmt.Errorf("couldn't create an Event with empty name")
 	}
 
-	data = strings.Trim(data, " ")
-
 	return &Event{
 			DataItem: *ds.NewItem(name, []byte(data)),
 			At:       time.Now(),
