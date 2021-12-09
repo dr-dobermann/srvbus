@@ -129,11 +129,63 @@ func (s *subscription) sendEvent(ctx context.Context,
 // if checking passed, filter returns given EventEnvelope
 // and nil otherwise.
 func (s *subscription) filter(ee *EventEnvelope) *EventEnvelope {
-	for _, f := range s.filters {
-		if !f.check(ee.event.Name, ee.event.Data()) {
-			return nil
-		}
+	if s.filters == nil || len(s.filters) == 0 {
+		return ee
 	}
+
+	// parallel filtration
+	fCtx, fCancel := context.WithCancel(context.Background())
+	defer fCancel()
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(s.filters))
+
+	// start results listener
+	checkFail := false
+	resCh := make(chan bool)
+	go func(checkFailFlag *bool) {
+		for {
+			select {
+			case <-fCtx.Done():
+				return
+
+			case res := <-resCh:
+				// if any filter returns error
+				// then stop everything and get out
+				if !res {
+					*checkFailFlag = true
+					fCancel()
+
+					return
+				}
+			}
+		}
+	}(&checkFail)
+
+	// start parallel filters
+	for _, f := range s.filters {
+		f := f
+		go func() {
+			select {
+			case <-fCtx.Done():
+			case resCh <- f.check(ee.event.Name, ee.event.Data()):
+			}
+			wg.Done()
+		}()
+	}
+
+	wg.Wait()
+
+	if checkFail {
+		return nil
+	}
+
+	// // sequental filtration
+	// for _, f := range s.filters {
+	// 	if !f.check(ee.event.Name, ee.event.Data()) {
+	// 		return nil
+	// 	}
+	// }
 
 	return ee
 }
