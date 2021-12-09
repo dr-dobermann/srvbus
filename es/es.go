@@ -23,6 +23,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var errNotImplementedYet error = fmt.Errorf("not implemented yet")
+
 type EventServerError struct {
 	ID   uuid.UUID
 	Name string
@@ -177,7 +179,7 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			events:    []EventEnvelope{},
 			subtopics: map[string]*Topic{},
 			inCh:      make(chan EventEnvelope),
-			subs:      map[uuid.UUID]*subscription{}}
+			subs:      map[uuid.UUID][]*subscription{}}
 
 		eSrv.topics[name] = nt
 
@@ -277,6 +279,45 @@ func (eSrv *EventServer) AddEvent(
 	}()
 
 	return nil
+}
+
+// Subscribe creates an one or many one subscriber's subscriptions.
+func (eSrv *EventServer) Subscribe(
+	subscriber uuid.UUID,
+	subs ...SubscrReq) error {
+
+	if !eSrv.IsRunned() {
+		return newESErr(eSrv, nil, "couldn't subscribe on a not-runned server")
+	}
+
+	if subscriber == uuid.Nil {
+		return newESErr(eSrv, nil, "no subscriber given")
+	}
+
+	for i, s := range subs {
+		if err := s.check(); err != nil {
+			return newESErr(eSrv, err, "bad subscription request #%d", i)
+		}
+
+		t, found := eSrv.hasTopic(s.Topic)
+		if !found {
+			return newESErr(eSrv, nil, "no topic '%s'", s.Topic)
+		}
+
+		if err := t.subscribe(subscriber, &s); err != nil {
+			return newESErr(eSrv, nil, "subscription #%d failed ", i)
+		}
+	}
+
+	return nil
+}
+
+// UnSubscribe cancels one or many subscriptions of one subscriber.
+func (eSrv *EventServer) UnSubscribe(
+	subscriber uuid.UUID,
+	subs ...SubscrReq) error {
+
+	return errNotImplementedYet
 }
 
 const (

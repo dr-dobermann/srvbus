@@ -8,8 +8,12 @@ import (
 	"time"
 
 	"github.com/dr-dobermann/srvbus/internal/ds"
+	"github.com/google/uuid"
 )
 
+// =============================================================================
+//                                  Event
+//
 // Event represent the single event in the system which
 // occurs somewhere and At given time, has name and other details in data.
 type Event struct {
@@ -69,4 +73,33 @@ func NewEventWithString(name string, data string) (*Event, error) {
 			At:       time.Now(),
 		},
 		nil
+}
+
+// =============================================================================
+//                               EventEnvelope
+//
+// EventEnvelope covers single Event and adds compliment information from its
+// registration.
+type EventEnvelope struct {
+	event *Event
+
+	Topic     string
+	Publisher uuid.UUID
+	RegAt     time.Time
+
+	// event index in the topic storage
+	Index int
+}
+
+// checks obligatory EventEnvelope fields
+func (ee EventEnvelope) check() error {
+	if ee.event == nil {
+		return fmt.Errorf("empty event")
+	}
+
+	if ee.Publisher == uuid.Nil {
+		return fmt.Errorf("no sender")
+	}
+
+	return nil
 }

@@ -9,54 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type EventEnvelope struct {
-	event *Event
-
-	Topic     string
-	Publisher uuid.UUID
-	RegAt     time.Time
-
-	// event index in the topic storage
-	Index int
-}
-
-//
-type eventFilter struct {
-	name string
-	data string
-}
-
-// subscription keeps status for one Subscriber.
-type subscription struct {
-	sync.Mutex
-
-	// subscriber id
-	subscriber uuid.UUID
-
-	// subscription request
-	subReq string
-
-	// channel for subscribed topics
-	eCh chan EventEnvelope
-
-	// last readed index of event in the related topic
-	//
-	// it used only if filterCond is not set (!nil)
-	lastReaded int
-
-	// event filter
-	filterCond *eventFilter
-}
-
-// filter checks if the event comply to filterConditions.
-//
-// if checking passed, filter returns given EventEnvelope
-// and nil otherwise.
-func (s *subscription) filter(ee *EventEnvelope) *EventEnvelope {
-
-	return ee
-}
-
 // Topic keep state of a single topic.
 type Topic struct {
 	sync.Mutex
@@ -80,7 +32,7 @@ type Topic struct {
 	inCh chan EventEnvelope
 
 	// subscribers for the queue
-	subs map[uuid.UUID]*subscription
+	subs map[uuid.UUID][]*subscription
 
 	// running flag
 	runned bool
@@ -124,7 +76,7 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 			events:    []EventEnvelope{},
 			subtopics: map[string]*Topic{},
 			inCh:      make(chan EventEnvelope),
-			subs:      map[uuid.UUID]*subscription{}}
+			subs:      map[uuid.UUID][]*subscription{}}
 		t.subtopics[name] = nt
 
 		if t.runned {
@@ -266,55 +218,24 @@ func (t *Topic) updateSubs(ctx context.Context, ee *EventEnvelope, pos int) {
 	t.Lock()
 	defer t.Unlock()
 
-	for _, s := range t.subs {
+	for _, sl := range t.subs {
 
-		s := s
+		ss := sl
 
 		go func() {
-			// check if there is a filter and event comply its conditions.
-			if s.filterCond != nil {
-				if ee = s.filter(ee); ee != nil {
-					// try to send event or stop on context's cancel
-					select {
-					case s.eCh <- *ee:
-					case <-ctx.Done():
-					}
-				}
-
-				return
-			}
-
-			for {
-				// check context cancelling
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				s.Lock()
-				// if sender wants to get first event in the t.events
-				//
-				// or
-				//
-				// wait until sender accepts all the previous events
-				// and then send the event into the output channel
-				if (s.lastReaded == 0 && pos == 0) ||
-					(s.lastReaded+1 == pos) {
-					s.eCh <- *ee
-
-					// set lastRead according to event position in
-					// the t.events
-					s.lastReaded = pos
-					s.Unlock()
-
-					return
-				}
-
-				s.Unlock()
+			// go throug one subscriber subsciptions
+			for _, s := range ss {
+				s := s
+				go s.sendEvent(ctx, ee, pos)
 			}
 		}()
 	}
+}
+
+// creating single subscritpition from the subscription request sr.
+func (t *Topic) subscribe(subscriber uuid.UUID, sr *SubscrReq) error {
+
+	return errNotImplementedYet
 }
 
 // -----------------------------------------------------------------------------

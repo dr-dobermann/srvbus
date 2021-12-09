@@ -36,10 +36,11 @@ func TestAddingEvents(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	eName := "TEST_EVT"
 	// add event on non-runned server
 	is.True(
 		eSrv.AddEvent("/main",
-			MustEvent(NewEventWithString("test_event", "test_event fired")),
+			MustEvent(NewEventWithString(eName, "test_event fired")),
 			uuid.New()) != nil)
 
 	is.NoErr(eSrv.Run(ctx, true))
@@ -52,7 +53,7 @@ func TestAddingEvents(t *testing.T) {
 	//
 	// testing invalid cases
 	test_event := MustEvent(
-		NewEventWithString("test_event", "test_event fired"))
+		NewEventWithString(eName, "test_event fired"))
 	err_cases := []struct {
 		test_name string
 		topic     string
@@ -76,9 +77,9 @@ func TestAddingEvents(t *testing.T) {
 	//
 	// testing adding event on any level of topic
 	events := []struct{ topic, event string }{
-		{"/main", "main_event"},
-		{"/main/subtopic", "subtopic_event"},
-		{"/main/subtopic/subsubtopic", "sstopic_event"}}
+		{"/main", "MAIN_EVT"},
+		{"/main/subtopic", "SUBTOPIC_EVT"},
+		{"/main/subtopic/subsubtopic", "SSTOPIC_EVT"}}
 
 	for _, e := range events {
 		t.Run("add_evt_to_"+e.topic, func(t *testing.T) {
