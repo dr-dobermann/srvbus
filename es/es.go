@@ -184,8 +184,6 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 		eSrv.topics[name] = nt
 
 		eSrv.log.Debugw("topic added to root",
-			"eSrvID", eSrv.ID,
-			"eSrvName", eSrv.Name,
 			"topic", name)
 
 		// if server is runned, run the topic too
@@ -305,8 +303,13 @@ func (eSrv *EventServer) Subscribe(
 		}
 
 		if err := t.subscribe(subscriber, &s); err != nil {
-			return newESErr(eSrv, nil, "subscription #%d failed ", i)
+			return newESErr(eSrv, err, "subscription #%d failed", i)
 		}
+
+		eSrv.log.Debugw("subscription added",
+			"subscriber", subscriber,
+			"topic", s.Topic,
+			"filters", s.Filters)
 	}
 
 	return nil
@@ -346,12 +349,10 @@ func New(
 	eSrv := new(EventServer)
 	eSrv.Name = name
 	eSrv.ID = id
-	eSrv.log = log
+	eSrv.log = log.Named(eSrv.Name + " #" + eSrv.ID.String())
 	eSrv.topics = make(map[string]*Topic)
 
-	eSrv.log.Infow("event server created",
-		"eSrvID", eSrv.ID,
-		"eSrvName", eSrv.Name)
+	eSrv.log.Info("event server created")
 
 	// add server's default topic
 	if err := eSrv.AddTopic(default_topic, "/"); err != nil {
@@ -374,8 +375,6 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 	}
 
 	eSrv.log.Infow("event server is starting...",
-		"eSrvID", eSrv.ID,
-		"eSrvName", eSrv.Name,
 		"cleanStart", cleanStart)
 
 	// create new topics table or clean it if needed
@@ -398,8 +397,6 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 		eSrv.Unlock()
 
 		eSrv.log.Infow("event server stopped",
-			"eSrvID", eSrv.ID,
-			"eSrvName", eSrv.Name,
 			"err", ctx.Err())
 
 	}()
@@ -412,9 +409,7 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 		t.run(ctx)
 	}
 
-	eSrv.log.Infow("event server started",
-		"eSrvID", eSrv.ID,
-		"eSrvName", eSrv.Name)
+	eSrv.log.Info("event server started")
 
 	return nil
 }

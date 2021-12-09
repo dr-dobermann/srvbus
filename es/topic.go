@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // Topic keep state of a single topic.
@@ -39,6 +40,9 @@ type Topic struct {
 
 	// runned context
 	ctx context.Context
+
+	// topic logger
+	log zap.SugaredLogger
 }
 
 // isRunned returns the running status of the topic
@@ -83,11 +87,8 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 			nt.run(t.ctx)
 		}
 
-		t.eServer.log.Debugw("subtopic added",
-			"eSrvID", t.eServer.ID,
-			"eSrvName", t.eServer.Name,
-			"subtopic", name,
-			"branch", t.fullName)
+		t.log.Debugw("subtopic added",
+			"subtopic", name)
 
 		return nil
 	}
@@ -128,10 +129,7 @@ func (t *Topic) hasSubtopic(topics []string) (*Topic, bool) {
 // run starts topic execution
 func (t *Topic) run(ctx context.Context) {
 	if t.isRunned() {
-		t.eServer.log.Warnw("topic already runned",
-			"eSrvID", t.eServer.ID,
-			"eSrvName", t.eServer.Name,
-			"topic", t.fullName)
+		t.log.Warn("topic already runned")
 
 		return
 	}
@@ -139,12 +137,10 @@ func (t *Topic) run(ctx context.Context) {
 	t.Lock()
 	t.runned = true
 	t.ctx = ctx
+	t.log = *t.eServer.log.Named(t.fullName)
 	t.Unlock()
 
-	t.eServer.log.Debugw("topic execution started...",
-		"eSrvID", t.eServer.ID,
-		"eSrvName", t.eServer.Name,
-		"topic", t.fullName)
+	t.log.Debug("topic execution started...")
 
 	// start all subtopics
 	go func() {
@@ -164,30 +160,15 @@ func (t *Topic) run(ctx context.Context) {
 				t.runned = false
 				t.Unlock()
 
-				t.eServer.log.Debugw("topic execution stopped",
-					"eSrvID", t.eServer.ID,
-					"eSrvName", t.eServer.Name,
-					"topic", t.fullName)
+				t.log.Debug("topic execution stopped")
 
 				return
 
 			// register the event
 			case ee := <-t.inCh:
-				if ee.event == nil {
-					t.eServer.log.Warnw("got empty event in envelope",
-						"eSrvID", t.eServer.ID,
-						"eSrvName", t.eServer.Name,
-						"topic", t.fullName)
-
-					continue
-				}
-
-				if ee.Publisher == uuid.Nil {
-					t.eServer.log.Warnw("event has no publisher id",
-						"eSrvID", t.eServer.ID,
-						"eSrvName", t.eServer.Name,
-						"topic", t.fullName,
-						"event", ee.event.String())
+				if err := ee.check(); err != nil {
+					t.log.Warnw("invalid envelope",
+						"err", err.Error())
 
 					continue
 				}
@@ -200,10 +181,7 @@ func (t *Topic) run(ctx context.Context) {
 				t.events = append(t.events, ee)
 				t.Unlock()
 
-				t.eServer.log.Debugw("new event registered",
-					"eSrvID", t.eServer.ID,
-					"eSrvName", t.eServer.Name,
-					"topic", t.fullName,
+				t.log.Debugw("new event registered",
 					"evtName", ee.event.Name)
 
 				// send event for subscribers

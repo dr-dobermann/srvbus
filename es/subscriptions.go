@@ -30,7 +30,7 @@ type SubscrReq struct {
 	Recursive bool
 	Depth     int
 	StartPos  int
-	Filters   []*Filter
+	Filters   []Filter
 }
 
 // checking subscription request obligatory fields
