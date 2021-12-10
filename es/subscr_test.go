@@ -3,6 +3,7 @@ package es
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -51,23 +52,6 @@ func TestSubscriptions(t *testing.T) {
 		})
 	}
 
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-
-			case ee, next := <-subCh:
-				if !next {
-					return
-				}
-
-				fmt.Printf(" ==> [%s] %v @%v : %s\n",
-					ee.Topic, ee.Publisher, ee.RegAt, ee.event.String())
-			}
-		}
-	}()
-
 	// add subscriptions
 	subs := []SubscrReq{
 		{mnt, subCh, RECURSIVE, 1, FROM_BEGIN, ALL_EVENTS},
@@ -90,11 +74,54 @@ func TestSubscriptions(t *testing.T) {
 		{st, MustEvent(NewEventWithString("WRLD_GRTNG", "Hello world!"))},
 	}
 
+	// run event reciever
+	// we shouldn't get only one event (0)
+	validEvents := []*Event{events[1].evt, events[2].evt, events[3].evt}
+	m := sync.Mutex{}
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			case ee, next := <-subCh:
+				if !next {
+					return
+				}
+
+				fmt.Printf(" ==> [%s] %v @%v : %s\n",
+					ee.Topic, ee.Publisher, ee.RegAt, ee.event.String())
+
+				// check event in validEvents
+				pos := -1
+				for i, e := range validEvents {
+					if e.Name == ee.event.Name {
+						pos = i
+					}
+				}
+
+				if pos == -1 {
+					panic("unexpected event " + ee.event.Name)
+				}
+
+				m.Lock()
+				validEvents = append(validEvents[:pos], validEvents[pos+1:]...)
+				m.Unlock()
+			}
+		}
+	}()
+
 	for _, te := range events {
 		is.NoErr(eSrv.AddEvent(te.topic, te.evt, sender))
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
+
+	// all events should be deleted when they are readed from the channel.
+	m.Lock()
+	is.Equal(len(validEvents), 0)
+	m.Unlock()
 
 	// unsubscribe from topics "/main"
 	is.NoErr(eSrv.UnSubscribe(subscriber, mnt))
