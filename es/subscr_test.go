@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/matryer/is"
@@ -23,12 +24,13 @@ func TestSubscriptions(t *testing.T) {
 	is.NoErr(eSrv.Run(ctx, false))
 
 	// add some topics
-	is.NoErr(eSrv.AddTopicQueue("/main/subtopic/subsubtopic", ""))
+	mnt := "/main"
+	st := "/main/subtopic"
+	sst := "/main/subtopic/subsubtopic"
+	is.NoErr(eSrv.AddTopicQueue(sst, ""))
 
 	subscriber := uuid.New()
 	subCh := make(chan EventEnvelope)
-
-	var filters []Filter
 
 	// check for invalid subscriptions
 	err_subs := map[string]struct {
@@ -36,11 +38,11 @@ func TestSubscriptions(t *testing.T) {
 		sr     SubscrReq
 	}{
 		"no_subscriber": {uuid.Nil,
-			SubscrReq{"/main", subCh, false, 0, 0, filters}},
+			SubscrReq{"/main", subCh, false, 0, 0, ALL_EVENTS}},
 		"no_topic": {subscriber,
-			SubscrReq{"/mani", subCh, false, 0, 0, filters}},
+			SubscrReq{"/mani", subCh, false, 0, 0, ALL_EVENTS}},
 		"no_channel": {subscriber,
-			SubscrReq{"/main", nil, false, 0, 0, filters}}}
+			SubscrReq{"/main", nil, false, 0, 0, ALL_EVENTS}}}
 	for tn, s := range err_subs {
 		t.Run(tn, func(t *testing.T) {
 			is.True(eSrv.Subscribe(s.subscr, s.sr) != nil)
@@ -66,15 +68,33 @@ func TestSubscriptions(t *testing.T) {
 
 	// add subscriptions
 	subs := []SubscrReq{
-		{"/main", subCh, true, 1, 0, filters},
-		{"/main/subtopic/subsubtopic",
-			subCh, false, 0, 0, []Filter{WithSubName("DOBER")}},
+		{mnt, subCh, RECURSIVE, 1, FROM_BEGIN, ALL_EVENTS},
+		{sst,
+			subCh, ONLY_ONE_TOPIC, 0, ONLY_NEW_EVENTS,
+			[]Filter{WithSubName("GREETING")}},
 	}
 	is.NoErr(eSrv.Subscribe(subscriber, subs...))
 
 	// emit some events to subscribed topics
+	sender := subscriber // it's possible than sender is
+	// the same as the subscriber
+	events := []struct {
+		topic string
+		evt   *Event
+	}{
+		{sst, MustEvent(NewEventWithString("TEST_EVT", "Shouldn't pass filter"))},
+		{sst, MustEvent(NewEventWithString("GREETINGS", "Hello Dr.Dobermann!"))},
+		{mnt, MustEvent(NewEventWithString("EVR_GRTNG", "Hello everybody!"))},
+		{st, MustEvent(NewEventWithString("WRLD_GRTNG", "Hello world!"))},
+	}
+
+	for _, te := range events {
+		is.NoErr(eSrv.AddEvent(te.topic, te.evt, sender))
+	}
 
 	// unsubscribe from some events
 
 	// emit events for cancelled subscriptions
+
+	time.Sleep(2 * time.Second)
 }

@@ -211,9 +211,74 @@ func (t *Topic) updateSubs(ctx context.Context, ee *EventEnvelope, pos int) {
 }
 
 // creating single subscritpition from the subscription request sr.
+//
+// subscribe doesn't check the subscription request sr, so
+//
+//   DON'T CALL IT DIRECTLY WITH INVALID REQUEST !!!
+//
 func (t *Topic) subscribe(subscriber uuid.UUID, sr *SubscrReq) error {
 
-	return errNotImplementedYet
+	if !t.isRunned() {
+		return newESErr(t.eServer, nil, "cannot subscribe on stopped topic")
+	}
+
+	s, ok := t.subs[subscriber]
+	if !ok {
+		s = []*subscription{}
+	}
+
+	ns := &subscription{
+		subscriber: subscriber,
+		subReq:     sr.Topic,
+		eCh:        sr.SubCh,
+		lastReaded: sr.StartPos,
+		filters:    sr.Filters}
+
+	s = append(s, ns)
+
+	t.subs[subscriber] = s
+
+	t.log.Debugw("subscriptoin added",
+		"topic", sr.Topic,
+		"recursive", sr.Recursive,
+		"rec_depth", sr.Depth)
+
+	go t.startSub(ns, sr.StartPos)
+
+	// if the subscription is recursive, add subscription to subtopics
+	if sr.Recursive && sr.Depth > 0 {
+		sr.Depth = sr.Depth - 1
+		for _, st := range t.subtopics {
+			if err := st.subscribe(subscriber, sr); err != nil {
+				return newESErr(
+					t.eServer,
+					err,
+					"couldn't subscribe a subtopic '%s'",
+					st.fullName)
+			}
+		}
+	}
+
+	return nil
+}
+
+// startSub sends all previous events to the newly created subscription
+// if it asks for them.
+func (t *Topic) startSub(s *subscription, fromID int) {
+	t.Lock()
+	defer t.Unlock()
+
+	if fromID < 0 {
+		s.Lock()
+		s.lastReaded = len(t.events) - 1
+		s.Unlock()
+		return
+	}
+
+	for pos, ee := range t.events[fromID:] {
+		ee := ee
+		go s.sendEvent(t.ctx, &ee, pos)
+	}
 }
 
 // -----------------------------------------------------------------------------

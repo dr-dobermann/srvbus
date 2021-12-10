@@ -23,12 +23,22 @@ func (f filterFunc) check(name string, data []byte) bool {
 	return f(name, data)
 }
 
+const (
+	FROM_BEGIN      int = 0
+	ONLY_NEW_EVENTS int = -1
+
+	RECURSIVE      bool = true
+	ONLY_ONE_TOPIC bool = false
+)
+
+var ALL_EVENTS []Filter = []Filter{}
+
 // SubscrReq consists of
 type SubscrReq struct {
 	Topic     string
 	SubCh     chan EventEnvelope
 	Recursive bool
-	Depth     int
+	Depth     uint
 	StartPos  int
 	Filters   []Filter
 }
@@ -82,11 +92,13 @@ func (s *subscription) sendEvent(ctx context.Context,
 	pos int) {
 
 	// check if there are any filter and event comply its conditions.
-	if ee := s.filter(ee); ee != nil {
-		// try to send event or stop on context's cancel
-		select {
-		case s.eCh <- *ee:
-		case <-ctx.Done():
+	if s.filters != nil && len(s.filters) > 0 {
+		if ee := s.filter(ee); ee != nil {
+			// try to send event or stop on context's cancel
+			select {
+			case s.eCh <- *ee:
+			case <-ctx.Done():
+			}
 		}
 
 		return
@@ -129,46 +141,22 @@ func (s *subscription) sendEvent(ctx context.Context,
 // if checking passed, filter returns given EventEnvelope
 // and nil otherwise.
 func (s *subscription) filter(ee *EventEnvelope) *EventEnvelope {
-	if s.filters == nil || len(s.filters) == 0 {
-		return ee
-	}
-
 	// parallel filtration
-	fCtx, fCancel := context.WithCancel(context.Background())
-	defer fCancel()
+	failState := false
+	filterFail := &failState
 
 	wg := sync.WaitGroup{}
 	wg.Add(len(s.filters))
 
-	// start results listener
-	checkFail := false
-	resCh := make(chan bool)
-	go func(checkFailFlag *bool) {
-		for {
-			select {
-			case <-fCtx.Done():
-				return
-
-			case res := <-resCh:
-				// if any filter returns error
-				// then stop everything and get out
-				if !res {
-					*checkFailFlag = true
-					fCancel()
-
-					return
-				}
-			}
-		}
-	}(&checkFail)
-
-	// start parallel filters
 	for _, f := range s.filters {
 		f := f
 		go func() {
-			select {
-			case <-fCtx.Done():
-			case resCh <- f.check(ee.event.Name, ee.event.Data()):
+			s.Lock()
+			defer s.Unlock()
+			res := f.check(ee.event.Name, ee.event.Data())
+			if !res {
+
+				*filterFail = true
 			}
 			wg.Done()
 		}()
@@ -176,7 +164,7 @@ func (s *subscription) filter(ee *EventEnvelope) *EventEnvelope {
 
 	wg.Wait()
 
-	if checkFail {
+	if *filterFail {
 		return nil
 	}
 

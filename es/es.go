@@ -305,11 +305,6 @@ func (eSrv *EventServer) Subscribe(
 		if err := t.subscribe(subscriber, &s); err != nil {
 			return newESErr(eSrv, err, "subscription #%d failed", i)
 		}
-
-		eSrv.log.Debugw("subscription added",
-			"subscriber", subscriber,
-			"topic", s.Topic,
-			"filters", s.Filters)
 	}
 
 	return nil
