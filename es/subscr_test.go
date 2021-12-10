@@ -30,7 +30,9 @@ func TestSubscriptions(t *testing.T) {
 	is.NoErr(eSrv.AddTopicQueue(sst, ""))
 
 	subscriber := uuid.New()
+
 	subCh := make(chan EventEnvelope)
+	defer close(subCh)
 
 	// check for invalid subscriptions
 	err_subs := map[string]struct {
@@ -38,11 +40,11 @@ func TestSubscriptions(t *testing.T) {
 		sr     SubscrReq
 	}{
 		"no_subscriber": {uuid.Nil,
-			SubscrReq{"/main", subCh, false, 0, 0, ALL_EVENTS}},
+			SubscrReq{"/main", subCh, ONLY_ONE_TOPIC, 0, 0, ALL_EVENTS}},
 		"no_topic": {subscriber,
-			SubscrReq{"/mani", subCh, false, 0, 0, ALL_EVENTS}},
+			SubscrReq{"/mani", subCh, ONLY_ONE_TOPIC, 0, 0, ALL_EVENTS}},
 		"no_channel": {subscriber,
-			SubscrReq{"/main", nil, false, 0, 0, ALL_EVENTS}}}
+			SubscrReq{"/main", nil, ONLY_ONE_TOPIC, 0, 0, ALL_EVENTS}}}
 	for tn, s := range err_subs {
 		t.Run(tn, func(t *testing.T) {
 			is.True(eSrv.Subscribe(s.subscr, s.sr) != nil)

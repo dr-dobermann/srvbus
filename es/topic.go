@@ -80,6 +80,7 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 			events:    []EventEnvelope{},
 			subtopics: map[string]*Topic{},
 			inCh:      make(chan EventEnvelope),
+			log:       *t.eServer.log.Named(t.fullName),
 			subs:      map[uuid.UUID][]*subscription{}}
 		t.subtopics[name] = nt
 
@@ -137,7 +138,6 @@ func (t *Topic) run(ctx context.Context) {
 	t.Lock()
 	t.runned = true
 	t.ctx = ctx
-	t.log = *t.eServer.log.Named(t.fullName)
 	t.Unlock()
 
 	t.log.Debug("topic execution started...")

@@ -23,8 +23,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var errNotImplementedYet error = fmt.Errorf("not implemented yet")
-
 type EventServerError struct {
 	ID   uuid.UUID
 	Name string
@@ -179,6 +177,7 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			events:    []EventEnvelope{},
 			subtopics: map[string]*Topic{},
 			inCh:      make(chan EventEnvelope),
+			log:       *eSrv.Logger().Named(name),
 			subs:      map[uuid.UUID][]*subscription{}}
 
 		eSrv.topics[name] = nt
