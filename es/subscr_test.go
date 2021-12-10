@@ -92,9 +92,13 @@ func TestSubscriptions(t *testing.T) {
 		is.NoErr(eSrv.AddEvent(te.topic, te.evt, sender))
 	}
 
-	// unsubscribe from some events
+	time.Sleep(5 * time.Second)
+
+	// unsubscribe from topics "/main"
+	is.NoErr(eSrv.UnSubscribe(subscriber, mnt))
 
 	// emit events for cancelled subscriptions
+	is.NoErr(eSrv.AddEvent(events[2].topic, events[2].evt, sender))
 
 	time.Sleep(2 * time.Second)
 }

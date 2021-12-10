@@ -299,7 +299,10 @@ func (eSrv *EventServer) Subscribe(
 
 		t, found := eSrv.hasTopic(s.Topic)
 		if !found {
-			return newESErr(eSrv, nil, "no topic '%s'", s.Topic)
+			return newESErr(
+				eSrv,
+				nil,
+				"couldn't subscribe to non-existed topic '%s'", s.Topic)
 		}
 
 		if err := t.subscribe(subscriber, &s); err != nil {
@@ -313,9 +316,34 @@ func (eSrv *EventServer) Subscribe(
 // UnSubscribe cancels one or many subscriptions of one subscriber.
 func (eSrv *EventServer) UnSubscribe(
 	subscriber uuid.UUID,
-	subs ...SubscrReq) error {
+	topics ...string) error {
 
-	return errNotImplementedYet
+	if !eSrv.IsRunned() {
+		return newESErr(eSrv, nil, "couldn't unsubscribe on stopped server")
+	}
+
+	if subscriber == uuid.Nil {
+		return newESErr(eSrv, nil, "no subscriber given")
+	}
+
+	for _, s := range topics {
+		t, found := eSrv.hasTopic(s)
+		if !found {
+			return newESErr(
+				eSrv,
+				nil,
+				"couldn't unsubscribe from non-existed topic %s", s)
+		}
+
+		if err := t.unsubscribe(subscriber); err != nil {
+			return newESErr(
+				eSrv,
+				err,
+				"unsubscription form topic %s failed", s)
+		}
+	}
+
+	return nil
 }
 
 const (

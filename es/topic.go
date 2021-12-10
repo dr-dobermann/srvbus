@@ -238,8 +238,9 @@ func (t *Topic) subscribe(subscriber uuid.UUID, sr *SubscrReq) error {
 
 	t.subs[subscriber] = s
 
-	t.log.Debugw("subscriptoin added",
-		"topic", sr.Topic,
+	t.log.Debugw("subscription added",
+		"subscriber", subscriber,
+		"sub request", sr.Topic,
 		"recursive", sr.Recursive,
 		"rec_depth", sr.Depth)
 
@@ -258,6 +259,26 @@ func (t *Topic) subscribe(subscriber uuid.UUID, sr *SubscrReq) error {
 			}
 		}
 	}
+
+	return nil
+}
+
+func (t *Topic) unsubscribe(subscriber uuid.UUID) error {
+	t.Lock()
+	defer t.Unlock()
+
+	if _, ok := t.subs[subscriber]; !ok {
+		return newESErr(
+			t.eServer,
+			nil,
+			"subscriber #%v has no subscriptions on topic %s",
+			subscriber, t.fullName)
+	}
+
+	delete(t.subs, subscriber)
+
+	t.log.Debugw("subscription cancelled",
+		"subscriber", subscriber)
 
 	return nil
 }
