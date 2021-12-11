@@ -57,25 +57,28 @@ func TestSvcServer(t *testing.T) {
 		// starting non-existing service
 		err := sSrv.ExecService(uuid.New())
 		is.True(err != nil)
-		t.Log(err.Error())
 
 		// starting executed service
 		err = sSrv.ExecService(id)
 		is.True(err != nil)
-		t.Log(err.Error())
 	})
 
 	// wait for invalid service
-	err = <-sSrv.WaitForService(ctx, uuid.New())
+	_, err = sSrv.WaitForService(ctx, uuid.New())
 	is.True(err != nil)
 
 	// wait for single service
-	err = <-sSrv.WaitForService(ctx, id)
+	singleSvc, err := sSrv.WaitForService(ctx, id)
 	is.NoErr(err)
 
+	res := <-singleSvc
+	fmt.Printf("  => svc #%v is finished. Success: %t", id, res)
+
 	// wait for all services
-	err = <-sSrv.WaitForService(ctx, uuid.Nil)
+	allSvc, err := sSrv.WaitForService(ctx, uuid.Nil)
 	is.NoErr(err)
+	res = <-allSvc
+	fmt.Printf("  => ALL svcs are finished. Success: %t", res)
 
 	is.Equal(output.String(), strings.Join(testStr, ""))
 

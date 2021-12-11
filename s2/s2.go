@@ -45,6 +45,8 @@ func (sf ServiceFunc) Run(ctx context.Context) error {
 // serviceRecord holds information about single Service registered on the
 // Service Server
 type serviceRecord struct {
+	sync.Mutex
+
 	id          uuid.UUID
 	name        string
 	svc         ServiceRunner
@@ -74,6 +76,21 @@ func (s svcState) String() string {
 	}[s]
 }
 
+func (sr *serviceRecord) getState() svcState {
+	sr.Lock()
+	defer sr.Unlock()
+
+	return sr.state
+}
+
+func (sr *serviceRecord) setState(ns svcState, err error) {
+	sr.Lock()
+	defer sr.Unlock()
+
+	sr.state = ns
+	sr.lastError = err
+}
+
 // =============================================================================
 // ServiceServer holds the Service Server current state.
 type ServiceServer struct {
@@ -83,9 +100,19 @@ type ServiceServer struct {
 	Name string
 	log  *zap.SugaredLogger
 
-	services   map[uuid.UUID]*serviceRecord
-	svcResCh   chan svcRes
-	cvcReadyCh chan uuid.UUID
+	ctx context.Context
+
+	services map[uuid.UUID]*serviceRecord
+	svcRunCh chan uuid.UUID
+
+	runned bool
+}
+
+func (sSrv *ServiceServer) IsRunned() bool {
+	sSrv.Lock()
+	defer sSrv.Unlock()
+
+	return sSrv.runned
 }
 
 // svcRes consists of results of execution one single Service.
@@ -99,6 +126,7 @@ func New(
 	id uuid.UUID,
 	name string,
 	log *zap.SugaredLogger) (*ServiceServer, error) {
+
 	if log == nil {
 		return nil, fmt.Errorf("logger isn't presented")
 	}
@@ -114,138 +142,70 @@ func New(
 	sSrv := new(ServiceServer)
 	sSrv.ID = id
 	sSrv.Name = name
-	sSrv.log = log
+	sSrv.log = log.Named(sSrv.Name + " #" + sSrv.ID.String())
 	sSrv.services = make(map[uuid.UUID]*serviceRecord)
 
-	sSrv.log.Debugw("new Service Server created",
-		"id", sSrv.ID,
-		"name", sSrv.Name)
+	sSrv.log.Debug("service server created")
 
 	return sSrv, nil
-}
-
-// regSvcState awaits the Service to finish and sets its
-// finish state.
-//
-// It runs as a go-routine from the Run method.
-//
-func (sSrv *ServiceServer) regSvcState(ctx context.Context) {
-	sSrv.log.Debugw("service state registrator started",
-		"srvID", sSrv.ID)
-
-	for {
-		select {
-		case <-ctx.Done():
-			sSrv.Lock()
-
-			close(sSrv.svcResCh)
-			close(sSrv.cvcReadyCh)
-
-			sSrv.svcResCh = nil
-			sSrv.cvcReadyCh = nil
-
-			sSrv.Unlock()
-
-			return
-
-		case sRes, ok := <-sSrv.svcResCh:
-			if !ok { // return on closed channel
-				return
-			}
-
-			s := SSEnded
-			if sRes.err != nil {
-				s = SSFailed
-			}
-
-			sSrv.Lock()
-
-			sr, ok := sSrv.services[sRes.id]
-			if !ok {
-				sSrv.log.Errorw("couldn't find service",
-					"srvID", sSrv.ID,
-					"service id", sRes.id)
-
-				sSrv.Unlock()
-
-				continue
-			}
-
-			sr.state = s
-			sr.lastError = sRes.err
-
-			sSrv.Unlock()
-
-			sSrv.log.Debugw("service ended",
-				"srvID", sSrv.ID,
-				"svc id", sRes.id,
-				"svc name", sr.name,
-				"state", s.String(),
-				"error", sRes.err)
-
-		// validity of the id should be checked before
-		// putting it into the channel. If not it causes panic
-		case id := <-sSrv.cvcReadyCh:
-			sSrv.Lock()
-			sSrv.services[id].state = SSReady
-			sSrv.Unlock()
-
-			sSrv.log.Debugw("service is ready to start",
-				"srvID", sSrv.ID,
-				"service ID", id)
-		}
-	}
 }
 
 // loop executes main processing loop of the Service Server.
 //
 // loop is started from Run method.
 func (sSrv *ServiceServer) loop(ctx context.Context) {
-	sSrv.log.Debugw("service server operation loop started",
-		"srvID", sSrv.ID)
+	sSrv.log.Debug("service state registrator started")
 
 	for {
-		// check if context cancelled
 		select {
 		case <-ctx.Done():
-			sSrv.log.Infow("server stopped",
-				"id", sSrv.ID,
-				"name", sSrv.Name)
+			sSrv.Lock()
+			sSrv.runned = false
+			sSrv.Unlock()
 
 			return
 
-		default:
-		}
+		case id := <-sSrv.svcRunCh:
+			sSrv.Lock()
+			sr, ok := sSrv.services[id]
+			sSrv.Unlock()
 
-		sSrv.Lock()
+			if !ok {
+				sSrv.log.Warnw("service not found",
+					"svc ID", id)
 
-		for id, sr := range sSrv.services {
-			sr := sr
-			id := id
-			if sr.state == SSReady {
-				sr.state = SSRunning
-
-				go func() {
-					sSrv.log.Debugw("service started",
-						"srvID", sSrv.ID,
-						"service ID", id,
-						"service name", sr.name)
-
-					err := sr.svc.Run(ctx)
-
-					if sSrv.svcResCh == nil {
-						sSrv.log.Errorw("service result channel is closed",
-							"srvID", sSrv.ID,
-							"service ID", id)
-
-						return
-					}
-
-					sSrv.svcResCh <- svcRes{id, err}
-				}()
+				continue
 			}
+
+			if sr.getState() != SSReady {
+
+				continue
+			}
+
+			go func() {
+				sr.setState(SSRunning, nil)
+
+				sSrv.log.Infow("service started",
+					"svc ID", id)
+
+				err := sr.svc.Run(ctx)
+
+				if err != nil {
+					sr.setState(SSFailed, err)
+
+					sSrv.log.Infow("service failed",
+						"svc ID", id,
+						"err", err)
+
+					return
+				}
+
+				sr.setState(SSEnded, nil)
+
+				sSrv.log.Infow("service ended",
+					"svc ID", id)
+			}()
 		}
-		sSrv.Unlock()
 	}
 }
 
@@ -254,18 +214,21 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 // to stop the server just call canecel function of the
 // context.
 func (sSrv *ServiceServer) Run(ctx context.Context) error {
-	sSrv.log.Infow("server started",
-		"id", sSrv.ID,
-		"name", sSrv.Name)
+	if sSrv.IsRunned() {
+		return fmt.Errorf("server already runned")
+	}
 
-	// creating channels every time server runs provides
-	// ability of multi run-stop execution.
-	sSrv.svcResCh = make(chan svcRes)
-	sSrv.cvcReadyCh = make(chan uuid.UUID)
+	sSrv.log.Info("server starting...")
 
-	go sSrv.regSvcState(ctx)
+	sSrv.Lock()
+	sSrv.runned = true
+	sSrv.ctx = ctx
+	sSrv.svcRunCh = make(chan uuid.UUID)
+	sSrv.Unlock()
 
 	go sSrv.loop(ctx)
+
+	sSrv.log.Info("server started")
 
 	return nil
 }
@@ -276,8 +239,9 @@ func (sSrv *ServiceServer) AddService(
 	s ServiceRunner,
 	stopCh chan struct{},
 	startImmediately bool) (uuid.UUID, error) {
+
 	if s == nil {
-		return uuid.Nil, fmt.Errorf("couldn't register nil-service")
+		return uuid.Nil, fmt.Errorf("couldn't register a nil-service")
 	}
 
 	id := uuid.New()
@@ -297,7 +261,7 @@ func (sSrv *ServiceServer) AddService(
 	sSrv.Unlock()
 
 	sSrv.log.Debugw("new service registered",
-		"id", id,
+		"svc ID", id,
 		"name", name)
 
 	if startImmediately {
@@ -313,6 +277,11 @@ func (sSrv *ServiceServer) AddService(
 // from SSRegistered to SSReady so it could start.
 func (sSrv *ServiceServer) ExecService(
 	id uuid.UUID) error {
+
+	if !sSrv.IsRunned() {
+		return fmt.Errorf("server isn't running")
+	}
+
 	sSrv.Lock()
 	defer sSrv.Unlock()
 
@@ -320,48 +289,61 @@ func (sSrv *ServiceServer) ExecService(
 
 	if !ok {
 		sSrv.log.Errorw("service isn't found",
-			"srvID", sSrv.ID,
-			"service ID", id)
+			"svc ID", id)
 
 		return fmt.Errorf("couldn't find service # %v", id)
 	}
 
-	if sr.state != SSRegistered {
-		sSrv.log.Errorw("unexpectd service state",
-			"srvID", sSrv.ID,
-			"service ID", id,
-			"state", sr.state.String())
+	srSt := sr.getState()
+	if srSt != SSRegistered {
+		sSrv.log.Errorw("invalid service state for running",
+			"svc ID", id,
+			"state", srSt.String())
 
 		return fmt.Errorf("invalid %s service state state %s for running",
-			id.String(), sr.state.String())
+			id.String(), srSt.String())
 	}
 
-	sSrv.cvcReadyCh <- id
+	go func() {
+		sr.setState(SSReady, nil)
+
+		select {
+		case <-sSrv.ctx.Done():
+		case sSrv.svcRunCh <- id:
+		}
+	}()
 
 	return nil
 }
 
 // StopService stops service which have non-nil stopChannel.
 func (sSrv *ServiceServer) StopService(id uuid.UUID) error {
-	sSrv.Lock()
-	defer sSrv.Unlock()
+	if !sSrv.IsRunned() {
+		return fmt.Errorf("server isn't running")
+	}
 
+	sSrv.Lock()
 	sr, ok := sSrv.services[id]
+	sSrv.Unlock()
+
 	if !ok {
 		return fmt.Errorf("couldn't find service %v", id)
 	}
 
-	if sr.state != SSRunning {
+	if srSt := sr.getState(); srSt != SSRunning {
 		return fmt.Errorf("service # %v isn't running(%s)",
-			id, sr.state.String())
+			id, srSt.String())
 	}
 
 	if sr.stopChannel != nil {
 		go func() {
-			sSrv.log.Debugw("stopping service",
-				"sSrvID", sSrv.ID,
-				"service ID", id)
-			sr.stopChannel <- struct{}{}
+			sSrv.log.Debugw("stopping service...",
+				"svc ID", id)
+			select {
+			case <-sSrv.ctx.Done():
+			case sr.stopChannel <- struct{}{}:
+				sr.setState(SSEnded, nil)
+			}
 		}()
 	}
 
@@ -390,8 +372,8 @@ func (sSrv *ServiceServer) ResumeService(id uuid.UUID) error {
 		return fmt.Errorf("service # %v is running. Couldn't resume it", id)
 	}
 
-	sr.state = SSRegistered
-	sSrv.cvcReadyCh <- id
+	sr.setState(SSReady, nil)
+	sSrv.svcRunCh <- id
 
 	return nil
 }
@@ -404,81 +386,122 @@ func (sSrv *ServiceServer) ResumeService(id uuid.UUID) error {
 //nolint:gocognit, cyclop
 func (sSrv *ServiceServer) WaitForService(
 	ctx context.Context,
-	id uuid.UUID) chan error {
+	id uuid.UUID) (chan bool, error) {
+
 	sSrv.log.Debugw("wait for service",
-		"srvID", sSrv.ID,
-		"service ID", id)
+		"svc ID", id)
 
-	resChan := make(chan error, 1)
-
+	// wait for a single service
 	if id != uuid.Nil {
 		sSrv.Lock()
-		_, ok := sSrv.services[id]
+		sr, ok := sSrv.services[id]
 		sSrv.Unlock()
 
 		if !ok {
-			resChan <- fmt.Errorf("couldn't find service %s", id.String())
-			close(resChan)
 			sSrv.log.Errorw("service isn't found for wait",
-				"srvID", sSrv.ID,
 				"service ID", id)
 
-			return resChan
+			return nil, fmt.Errorf("couldn't find service %s", id.String())
 		}
+
+		resChan := make(chan bool)
+
+		go sSrv.waitForSvc(ctx, sr, resChan)
+
+		return resChan, nil
 	}
 
-	go func() {
-		for {
-			// check context
+	// wait for all running services
+	resChan := make(chan bool)
+
+	sSrv.Lock()
+	// I'm not sure what buffer take for accumulator channel
+	// and I don't think that additional for loop to count them
+	// is a good idea. Moreover some of them could finish in
+	// between to loops. So I think number of services / 2 is a
+	// good buffer size for accumulating channel
+	sumChan := make(chan bool, len(sSrv.services)/2)
+	srCount := 0
+	for _, sr := range sSrv.services {
+		if sr.getState() == SSRunning {
+			go sSrv.waitForSvc(ctx, sr, sumChan)
+			srCount++
+		}
+	}
+	sSrv.Unlock()
+
+	// if all serviced are already completed, just send true into
+	if srCount == 0 {
+		go func() {
+			// send ok or wait for the context's cancel
 			select {
 			case <-ctx.Done():
-				resChan <- ctx.Err()
-				close(resChan)
+			case resChan <- true:
+			}
+		}()
 
+		return resChan, nil
+	}
+
+	// run service waiting summator to accumulate all
+	// signals from previously runned waitForSvc s
+	go func(cnt int) {
+		for cnt > 0 {
+			select {
+			case <-ctx.Done():
+				resChan <- false
 				return
 
-			default:
-			}
-
-			cnt := 0
-
-			sSrv.Lock()
-
-			for _, rs := range sSrv.services {
-				// pass through all finalized services
-				if rs.state == SSEnded || rs.state == SSFailed {
-					// and count them
-					cnt++
-
-					// check finalization of one Service
-					// tell that nedded Service is ended
-					// and return
-					if id != uuid.Nil && rs.id == id {
-						resChan <- nil
-						close(resChan)
-						sSrv.Unlock()
-
-						return
-					}
+			case res := <-sumChan:
+				if !res {
+					resChan <- res
+					return
 				}
+				cnt--
 			}
-
-			// if it's awaited all the services ended
-			// whait until nuber of ended services is not equal to
-			// number of services
-			if id == uuid.Nil && cnt == len(sSrv.services) {
-				resChan <- nil
-				close(resChan)
-				sSrv.Unlock()
-
-				return
-			}
-
-			sSrv.Unlock()
 		}
-	}()
 
-	return resChan
+		// send notification that all services are
+		// completed
+		close(sumChan)
+
+		resChan <- true
+
+	}(srCount)
+
+	return resChan, nil
+}
+
+// waits for a single service complition.
+func (sSrv *ServiceServer) waitForSvc(
+	ctx context.Context,
+	sr *serviceRecord,
+	resChan chan bool) {
+
+	var rCh chan bool
+
+	for {
+		if srSt := sr.getState(); srSt == SSEnded || srSt == SSFailed {
+			rCh = resChan
+		}
+
+		select {
+		// if interrupted by context, return false
+		case <-ctx.Done():
+			resChan <- false
+
+			return
+
+		// this case will be blocked until the service isn't
+		// finished and rCh becomes non-nil channel (resChan)
+		case rCh <- true:
+
+			return
+
+		// do not block if there is nothing to send or receive
+		default:
+		}
+	}
 }
 
 // S2Stat consists the Service Server status returned by Stat mehtod.
@@ -533,7 +556,7 @@ func (sSrv *ServiceServer) Stat() S2Stat {
 	sSrv.Lock()
 	defer sSrv.Unlock()
 
-	stat.Active = sSrv.svcResCh != nil
+	stat.Active = sSrv.runned
 	stat.Name = sSrv.Name
 	stat.ID = sSrv.ID
 

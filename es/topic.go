@@ -152,43 +152,46 @@ func (t *Topic) run(ctx context.Context) {
 		}
 	}()
 
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				t.Lock()
-				t.runned = false
-				t.Unlock()
+	// register the event
+	// send event for subscribers
+	go t.processTopic(ctx)
+}
 
-				t.log.Debug("topic execution stopped")
+// processing main topic cycle
+func (t *Topic) processTopic(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			t.Lock()
+			t.runned = false
+			t.Unlock()
 
-				return
+			t.log.Debug("topic execution stopped")
 
-			// register the event
-			case ee := <-t.inCh:
-				if err := ee.check(); err != nil {
-					t.log.Warnw("invalid envelope",
-						"err", err.Error())
+			return
 
-					continue
-				}
+		case ee := <-t.inCh:
+			if err := ee.check(); err != nil {
+				t.log.Warnw("invalid envelope",
+					"err", err.Error())
 
-				ee.RegAt = time.Now()
-
-				t.Lock()
-				pos := len(t.events)
-				ee.Index = pos
-				t.events = append(t.events, ee)
-				t.Unlock()
-
-				t.log.Debugw("new event registered",
-					"evtName", ee.event.Name)
-
-				// send event for subscribers
-				go t.updateSubs(ctx, &ee, pos)
+				continue
 			}
+
+			ee.RegAt = time.Now()
+
+			t.Lock()
+			pos := len(t.events)
+			ee.Index = pos
+			t.events = append(t.events, ee)
+			t.Unlock()
+
+			t.log.Debugw("new event registered",
+				"evtName", ee.event.Name)
+
+			go t.updateSubs(ctx, &ee, pos)
 		}
-	}()
+	}
 }
 
 // updateSubs sends all the subscribers a single EventEnvelope.
@@ -214,10 +217,9 @@ func (t *Topic) updateSubs(ctx context.Context, ee *EventEnvelope, pos int) {
 //
 // subscribe doesn't check the subscription request sr, so
 //
-//   DON'T CALL IT DIRECTLY WITH INVALID REQUEST !!!
+//   'DO NOT CALL IT DIRECTLY WITH INVALID REQUEST !!!
 //
 func (t *Topic) subscribe(subscriber uuid.UUID, sr *SubscrReq) error {
-
 	if !t.isRunned() {
 		return newESErr(t.eServer, nil, "cannot subscribe on stopped topic")
 	}
@@ -263,7 +265,15 @@ func (t *Topic) subscribe(subscriber uuid.UUID, sr *SubscrReq) error {
 	return nil
 }
 
+// unsubscribes subscriber from the topic.
 func (t *Topic) unsubscribe(subscriber uuid.UUID) error {
+	if !t.isRunned() {
+		return newESErr(
+			t.eServer,
+			nil,
+			"cannot unsubscribe from a stopped topic")
+	}
+
 	t.Lock()
 	defer t.Unlock()
 
