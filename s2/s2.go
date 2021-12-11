@@ -142,7 +142,8 @@ func New(
 	sSrv := new(ServiceServer)
 	sSrv.ID = id
 	sSrv.Name = name
-	sSrv.log = log.Named(sSrv.Name + " #" + sSrv.ID.String())
+	sSrv.log = log.Named("S2: " + sSrv.Name +
+		" #" + sSrv.ID.String())
 	sSrv.services = make(map[uuid.UUID]*serviceRecord)
 
 	sSrv.log.Debug("service server created")

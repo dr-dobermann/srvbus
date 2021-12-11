@@ -46,7 +46,8 @@ func newESErr(
 // Error implements fmt.Error interface for EventServiceError
 func (ese EventServerError) Error() string {
 
-	return fmt.Sprintf("ES '%s' # %v ERR: %s : %v", ese.Name,
+	return fmt.Sprintf("ES: %s # %v. ERROR: %s : %v",
+		ese.Name,
 		ese.ID,
 		ese.Msg,
 		ese.Err)
@@ -371,7 +372,8 @@ func New(
 	eSrv := new(EventServer)
 	eSrv.Name = name
 	eSrv.ID = id
-	eSrv.log = log.Named(eSrv.Name + " #" + eSrv.ID.String())
+	eSrv.log = log.Named("ES: " + eSrv.Name +
+		" #" + eSrv.ID.String())
 	eSrv.topics = make(map[string]*Topic)
 
 	eSrv.log.Info("event server created")

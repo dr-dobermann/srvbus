@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/dr-dobermann/srvbus/ms"
 	"github.com/google/uuid"
@@ -45,14 +44,14 @@ func main() {
 		panic("coudln't read a messages : " + err.Error())
 	}
 
-	for i, m := range mes {
+	i := 0
+	for m := range mes {
 		fmt.Println("#", i+1, "msg has key:'", m.Name,
 			"' and data:[", string(m.Data()),
 			"] received at", m.Registered,
 			"from", m.Sender)
+		i++
 	}
 
 	cancel()
-
-	time.Sleep(5 * time.Second)
 }

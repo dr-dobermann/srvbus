@@ -58,14 +58,17 @@ func TestMSrv(t *testing.T) {
 	is.True(err != nil)
 	is.True(mes == nil)
 
+	time.Sleep(2 * time.Second)
+
 	// get messages from the server
 	mes, err = ms.GetMessages(uuid.New(), qn, false)
 	is.NoErr(err)
-	is.Equal(len(mes), 2)
 
-	for i, m := range mes {
+	i := 0
+	for m := range mes {
 		is.Equal(mm[i].name, m.Name)
 		is.True(bytes.Equal([]byte(mm[i].val), m.Data()))
+		i++
 	}
 
 	t.Run("wait_for_queue testing", func(t *testing.T) {

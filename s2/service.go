@@ -156,7 +156,9 @@ func NewGetMessagesService(
 					queue, err)
 			}
 
-			mm = append(mm, mes...)
+			for me := range mes {
+				mm = append(mm, me)
+			}
 
 			// if we should return as many messages as
 			// we could get for a single ms.GetMessages call

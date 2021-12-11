@@ -19,6 +19,7 @@ package ms
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -107,11 +108,9 @@ func New(
 	ms := &MessageServer{
 		id:   id,
 		Name: name,
-		log:  log}
+		log:  log.Named("MS: " + name + "#" + id.String())}
 
-	log.Debugw("message server created",
-		"mSrvID", ms.id,
-		"name", ms.Name)
+	log.Debug("message server created")
 
 	return ms, nil
 }
@@ -119,9 +118,7 @@ func New(
 // Run starts the Message Server if it isn't started.
 func (mSrv *MessageServer) Run(ctx context.Context) {
 	if mSrv.IsRunned() {
-		mSrv.log.Infow("alredy runned",
-			"mSrvID", mSrv.id,
-			"name", mSrv.Name)
+		mSrv.log.Warn("alredy runned")
 
 		return
 	}
@@ -133,9 +130,7 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 	mSrv.runned = true
 	mSrv.Unlock()
 
-	mSrv.log.Infow("message server started",
-		"mSrvID", mSrv.id,
-		"name", mSrv.Name)
+	mSrv.log.Info("server started")
 
 	go func() {
 		<-ctx.Done()
@@ -146,9 +141,7 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 
 		mSrv.Unlock()
 
-		mSrv.log.Infow("message server stopped",
-			"mSrvID", mSrv.id,
-			"name", mSrv.Name)
+		mSrv.log.Info("server stopped")
 	}()
 }
 
@@ -164,8 +157,19 @@ func (mSrv *MessageServer) PutMessages(
 	sender uuid.UUID,
 	queue string,
 	msgs ...*Message) error {
+
+	queue = strings.Trim(queue, " ")
 	if queue == "" {
-		return fmt.Errorf("empty queue name for messages putting")
+		return fmt.Errorf("couldn't puth messages into " +
+			"an empty queue")
+	}
+
+	if sender == uuid.Nil {
+		return fmt.Errorf("sender isn't specified")
+	}
+
+	if len(msgs) == 0 {
+		return fmt.Errorf("no messages")
 	}
 
 	mSrv.Lock()
@@ -176,23 +180,21 @@ func (mSrv *MessageServer) PutMessages(
 		return fmt.Errorf("server isn't runned")
 	}
 
-	_, ok := mSrv.queues[queue]
+	q, ok := mSrv.queues[queue]
 	if !ok {
-		q, err := newQueue(mSrv.ctx, uuid.New(), queue, mSrv.log)
+		nq, err := newQueue(mSrv.ctx, queue, mSrv.log)
 		if err != nil {
 			mSrv.log.Errorw("couldn't put messages",
 				"queue", queue,
 				"err", err.Error())
 
-			return fmt.Errorf("put messages failde : %w", err)
+			return fmt.Errorf("put messages failed : %w", err)
 		}
 
-		mSrv.queues[queue] = q
+		mSrv.queues[queue] = nq
+
+		q = nq
 	}
-
-	q := mSrv.queues[queue]
-
-	mSrv.log.Debugw("putting messages", "queue", q.name)
 
 	return q.putMessages(mSrv.ctx, sender, msgs...)
 }
@@ -207,26 +209,29 @@ func (mSrv *MessageServer) PutMessages(
 func (mSrv *MessageServer) GetMessages(
 	receiver uuid.UUID,
 	queue string,
-	fromBegin bool) ([]MessageEnvelope, error) {
-	q, ok := mSrv.queues[queue]
-	if !ok {
-		mSrv.log.Errorw("no queue", "queue", queue)
+	fromBegin bool) (chan MessageEnvelope, error) {
 
+	if receiver == uuid.Nil {
+		return nil,
+			fmt.Errorf(
+				"receiver of message isn't set for queue %s",
+				queue)
+	}
+
+	// check if the server is ruuning
+	if !mSrv.IsRunned() {
+		return nil, fmt.Errorf("server isn't runned")
+	}
+
+	mSrv.Lock()
+	q, ok := mSrv.queues[queue]
+	mSrv.Unlock()
+
+	if !ok {
 		return nil,
 			fmt.Errorf("queue '%s' isn't found on the server '%s'",
 				queue, mSrv.Name)
 	}
-
-	mSrv.Lock()
-	runned := mSrv.runned
-	mSrv.Unlock()
-
-	// check if the server is ruuning
-	if !runned {
-		return nil, fmt.Errorf("server isn't runned")
-	}
-
-	mSrv.log.Debugw("getting messages", "queue", q.name)
 
 	return q.getMessages(mSrv.ctx, receiver, fromBegin)
 }
@@ -264,6 +269,7 @@ func (mSrv *MessageServer) GetMessages(
 func (mSrv *MessageServer) WaitForQueue(
 	ctx context.Context,
 	queue string) (chan bool, error) {
+
 	if !mSrv.IsRunned() {
 		return nil, fmt.Errorf("server isn't running")
 	}

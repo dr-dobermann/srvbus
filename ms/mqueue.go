@@ -3,6 +3,8 @@ package ms
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,8 +42,9 @@ type queueMessagesRequest struct {
 
 // Message Queue
 type mQueue struct {
-	id       uuid.UUID
-	name     string
+	sync.Mutex
+
+	Name     string
 	messages []*MessageEnvelope
 
 	// lastReaded holds the last readed message id for the
@@ -56,38 +59,25 @@ type mQueue struct {
 	// messages return channel
 	mReqCh chan queueMessagesRequest
 
-	// queue's messages number request channnel
-	// it is also used as queue active flag
-	mCntCh chan int
-
-	// number of messages in the queue
-	cnt int
+	runned bool
 }
 
 // count returns current number of the messages in the queue.
 //
 // if the queue loop is stopped, then -1 returned.
-func (q mQueue) count() int {
-	if c, ok := <-q.mCntCh; ok {
-		return c
-	}
+func (q *mQueue) count() int {
+	q.Lock()
+	defer q.Unlock()
 
-	return -1
+	return len(q.messages)
 }
 
 // isActive returns current queue's processing loop status.
-func (q mQueue) isActive() bool {
-	return q.count() >= 0
-}
+func (q *mQueue) isActive() bool {
+	q.Lock()
+	defer q.Unlock()
 
-// ID returns a queue's id
-func (q mQueue) ID() uuid.UUID {
-	return q.id
-}
-
-// Name returns queue's name
-func (q mQueue) Name() string {
-	return q.name
+	return q.runned
 }
 
 // loop porcesses:
@@ -103,9 +93,9 @@ func (q *mQueue) loop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			close(q.regCh)
-			close(q.mReqCh)
-			close(q.mCntCh)
+			q.Lock()
+			q.runned = false
+			q.Unlock()
 
 			return
 
@@ -119,18 +109,16 @@ func (q *mQueue) loop(ctx context.Context) {
 			me.Registered = time.Now()
 			me.Sender = mrr.sender
 
+			q.Lock()
 			q.messages = append(q.messages, me)
-
-			q.cnt++
+			q.Unlock()
 
 			q.log.Debugw("message registered",
-				"queue", q.name,
 				"msgID", me.Name,
 				"key", me.Name)
 
 		case mReq := <-q.mReqCh:
 			q.log.Debugw("got messages request",
-				"queue", q.name,
 				"receiver", mReq.receiver)
 
 			from := q.lastReaded[mReq.receiver]
@@ -154,14 +142,12 @@ func (q *mQueue) loop(ctx context.Context) {
 			}()
 
 			q.log.Debugw("message request processing ended",
-				"queue", q.name,
 				"receiver", mReq.receiver,
 				"messages number", len(mes))
 
+			q.Lock()
 			q.lastReaded[mReq.receiver] = from + len(mes)
-
-		case q.mCntCh <- q.cnt: // send current messages count
-			continue
+			q.Unlock()
 		}
 	}
 }
@@ -173,35 +159,31 @@ func (q *mQueue) loop(ctx context.Context) {
 // newQueue runs the queue processing loop.
 func newQueue(
 	ctx context.Context,
-	id uuid.UUID,
 	name string,
 	log *zap.SugaredLogger) (*mQueue, error) {
-	if log == nil {
-		return nil, fmt.Errorf("nil logger given for queue %s", name)
-	}
 
-	if id == uuid.Nil {
-		id = uuid.New()
-	}
-
+	name = strings.Trim(name, " ")
 	if name == "" {
-		name = "mQueue #" + id.String()
+		return nil, fmt.Errorf("no name for a new queue")
 	}
 
 	q := mQueue{
-		id:         id,
-		name:       name,
+		Name:       name,
 		messages:   make([]*MessageEnvelope, 0),
 		lastReaded: make(map[uuid.UUID]int),
-		log:        log,
+		log:        log.Named(name),
 		regCh:      make(chan msgRegRequest),
-		mReqCh:     make(chan queueMessagesRequest),
-		mCntCh:     make(chan int)}
+		mReqCh:     make(chan queueMessagesRequest)}
 
 	// start processing loop
+	q.Lock()
+	q.runned = true
+	q.Unlock()
+
 	go q.loop(ctx)
 
-	log.Debugw("new message queue is created", "name", q.name, "id", q.id)
+	log.Debugw("new message queue is created",
+		"queue", name)
 
 	return &q, nil
 }
@@ -213,44 +195,26 @@ func (q *mQueue) putMessages(
 	ctx context.Context,
 	sender uuid.UUID,
 	msgs ...*Message) error {
+
 	if !q.isActive() {
-		q.log.Errorw("queue isn't processing requests",
-			"queue", q.name)
-
 		return fmt.Errorf("couldn't put messages into stopped queue %s",
-			q.name)
+			q.Name)
 	}
 
-	if len(msgs) == 0 {
-		q.log.Errorw("couldn't put empty message list on queue",
-			"queue", q.name)
+	go func() {
+		for _, m := range msgs {
+			m := m
+			select {
+			case <-ctx.Done():
+				return
 
-		return fmt.Errorf("couldn't put an empty messages "+
-			"list into queue %s", q.name)
-	}
-
-	if sender == uuid.Nil {
-		q.log.Errorw("sender isn't specified", "queue", q.name)
-
-		return fmt.Errorf("sender isn't specified")
-	}
-
-	for _, m := range msgs {
-		m := m
-		select {
-		case <-ctx.Done():
-			q.log.Error("context stopped for putting messages")
-
-			return fmt.Errorf("put messages interrupted by context : %w",
-				ctx.Err())
-
-		case q.regCh <- msgRegRequest{sender: sender, msg: m}:
-			q.log.Debugw("message registration request sent",
-				"queue", q.name,
-				"msgID", m.ID,
-				"key", m.Name)
+			case q.regCh <- msgRegRequest{sender: sender, msg: m}:
+				q.log.Debugw("message registration request sent",
+					"msgID", m.ID,
+					"key", m.Name)
+			}
 		}
-	}
+	}()
 
 	return nil
 }
@@ -259,57 +223,49 @@ func (q *mQueue) putMessages(
 func (q *mQueue) getMessages(
 	ctx context.Context,
 	receiver uuid.UUID,
-	fromBegin bool) ([]MessageEnvelope, error) {
-	if !q.isActive() {
-		q.log.Errorw("queue isn't processing requests",
-			"queue", q.name)
+	fromBegin bool) (chan MessageEnvelope, error) {
 
+	if !q.isActive() {
 		return nil,
 			fmt.Errorf("couldn't get messages from the stopped queue %s",
-				q.name)
+				q.Name)
 	}
-
-	if receiver == uuid.Nil {
-		q.log.Errorw("receiver of messages isn't set", "queue", q.name)
-
-		return nil,
-			fmt.Errorf("receiver of message isn't set for queue %s", q.name)
-	}
-
-	mes := []MessageEnvelope{}
-
 	messages := make(chan MessageEnvelope)
-	q.mReqCh <- queueMessagesRequest{receiver, fromBegin, messages}
 
 	q.log.Debugw("start reading messages",
 		"receiver", receiver,
-		"queue", q.name,
 		"from begin", fromBegin)
 
-	for {
-		select {
-		case <-ctx.Done():
-			return nil,
-				fmt.Errorf("message getting closed by context : %w",
-					ctx.Err())
+	q.Lock()
 
-		case me, ok := <-messages:
-			if !ok {
-				q.log.Debugw("stop reading messages",
-					"receiver", receiver,
-					"queue", q.name,
-					"count", len(mes))
-
-				return mes, nil
-			}
-
-			q.log.Debugw("read message",
-				"receiver", receiver,
-				"queue", q.name,
-				"m 		ID", me.ID,
-				"msd Key", me.Name)
-
-			mes = append(mes, me)
-		}
+	from := 0
+	if !fromBegin {
+		from = q.lastReaded[receiver]
 	}
+
+	res := append([]*MessageEnvelope{}, q.messages[from:]...)
+
+	q.Unlock()
+
+	go func() {
+		c := len(res)
+		for i, me := range res {
+			me := me
+
+			select {
+			case <-ctx.Done():
+				return
+
+			case messages <- *me:
+				q.log.Debug(fmt.Sprintf("message %d/%d sent", i+1, c),
+					"receiver", receiver,
+					"msgID", me.ID,
+					"msd Key", me.Name)
+			}
+		}
+
+		close(messages)
+	}()
+
+	return messages, nil
 }
