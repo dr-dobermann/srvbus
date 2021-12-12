@@ -23,6 +23,9 @@ import (
 	"go.uber.org/zap"
 )
 
+var errNotImplementedYet = fmt.Errorf("not implemented yet")
+
+// EventServerError is a error wrapper for Event Server and his things.
 type EventServerError struct {
 	ID   uuid.UUID
 	Name string
@@ -142,10 +145,15 @@ func (eSrv *EventServer) hasTopic(name string) (*Topic, bool) {
 // isn't '/' then it assumed as the first topic from the root
 // "topic" == "/topic".
 //
-// Topics could be added even when the EventServer is not running,
-// but if it runs with cleanStart == true !!!ALL TOPICS WILL BE LOST!!!
+// Topics couldn't be added when the EventServer is not running,
+// if event server reruns with cleanStart == true
+// '!!!ALL TOPICS WILL BE LOST!!!
 //
 func (eSrv *EventServer) AddTopic(name string, branch string) error {
+	if !eSrv.IsRunned() {
+		return newESErr(eSrv, nil, "couldn't add topic on not-runned server")
+	}
+
 	name = strings.Trim(name, " ")
 	if name == "" {
 		return newESErr(eSrv, nil, "empty topic name is not allowed")
@@ -231,6 +239,54 @@ func (eSrv *EventServer) AddTopicQueue(
 			}
 			branch += "/" + t
 		}
+	}
+
+	return nil
+}
+
+// RemoveTopic removes single topic or topics' subbranch if recursive == true.
+func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
+	if !eSrv.IsRunned() {
+		return newESErr(eSrv, nil, "couldn't remove topic on stopped server")
+	}
+
+	t, found := eSrv.hasTopic(topic)
+	if !found {
+		return newESErr(eSrv, nil, "topic isn't found")
+	}
+
+	// get the topic which owns the selected one
+
+	// first element of the Split is an empty string, so drop it
+	tt := strings.Split(t.fullName, "/")[1:]
+	tn := ""
+	for _, s := range tt[:len(tt)-1] {
+		tn += "/" + s
+	}
+	// the subtopic name that should be deleted
+	td := tt[len(tt)-1]
+
+	if len(tn) > 0 { // if its not a root topic
+		t, found = eSrv.hasTopic(td)
+	}
+
+	// remove topics childs if recursive or fire an error
+	if err := t.removeSubtopic(td, recursive); err != nil {
+		return newESErr(
+			eSrv, err,
+			"couldn't delete subtopic '%s' of '%s'", td, tn)
+	}
+
+	// if it's root topic, remove it
+	if len(tn) == 0 {
+		// stop the topic if it's running
+		if t.isRunned() {
+			t.cancelCtx()
+		}
+
+		eSrv.Lock()
+		delete(eSrv.topics, topic)
+		eSrv.Unlock()
 	}
 
 	return nil
@@ -361,7 +417,8 @@ func New(
 	}
 
 	if name == "" {
-		name = "EventServer #" + id.String()
+		i := id.String()
+		name = "EventServer #" + i[len(i)-4:]
 	}
 	if log == nil {
 		return nil,
@@ -377,15 +434,6 @@ func New(
 	eSrv.topics = make(map[string]*Topic)
 
 	eSrv.log.Info("event server created")
-
-	// add server's default topic
-	if err := eSrv.AddTopic(default_topic, "/"); err != nil {
-		return nil,
-			newESErr(
-				eSrv,
-				err,
-				"couldn't add default topic '%s'", default_topic)
-	}
 
 	return eSrv, nil
 }
@@ -404,14 +452,6 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 	// create new topics table or clean it if needed
 	if cleanStart {
 		eSrv.topics = make(map[string]*Topic)
-
-		// add server's default topic
-		if err := eSrv.AddTopic(default_topic, "/"); err != nil {
-			return newESErr(
-				eSrv,
-				err,
-				"couldn't add default topic '%s'", default_topic)
-		}
 	}
 
 	go func() {
@@ -427,6 +467,14 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 
 	eSrv.ctx = ctx
 	eSrv.runned = true
+
+	// add server's default topic
+	if err := eSrv.AddTopic(default_topic, "/"); err != nil {
+		return newESErr(
+			eSrv,
+			err,
+			"couldn't add default topic '%s'", default_topic)
+	}
 
 	// run all topics
 	for _, t := range eSrv.topics {

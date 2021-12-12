@@ -28,7 +28,7 @@ To put messages `PutMessages` method of MessageServer should be invoked. Current
 
 ## Getting messages from the server
 
-To get saved on the Message Server messages, `GetMessages` method should be called. This method returns a list of `MessageEnvelopes` which consists among the Message itself also time of it registration on the Server and the ID of the message sender. 
+To get saved on the Message Server messages, `GetMessages` method should be called. This method returns a channel of `MessageEnvelopes` which consists among the Message itself also time of it registration on the Server and the ID of the message sender. 
 
 `GetMessages` demands the receiver ID, and the queue name. If there were previous reading from the same queue and for the same receiver, then only new messages would be returned. To read queue from the start,
 the third parameter `fromBegin` shold be set to `true`.

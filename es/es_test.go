@@ -96,3 +96,27 @@ func TestAddingEvents(t *testing.T) {
 	// stop the server
 	cancel()
 }
+
+func TestTopicsManagement(t *testing.T) {
+	is := is.New(t)
+
+	eSrv := getServer(uuid.New(), "ESTest", t)
+	is.True(eSrv != nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	is.NoErr(eSrv.Run(ctx, true))
+
+	tn := "/main/subtopic/subsubtopic"
+	tn1 := "st/sst/ssst"
+
+	is.NoErr(eSrv.AddTopicQueue(tn, ""))
+	is.NoErr(eSrv.AddTopicQueue(tn1, "/main"))
+
+	is.True(eSrv.HasTopic(tn))
+	is.True(eSrv.HasTopic("/main/" + tn1))
+
+	is.NoErr(eSrv.RemoveTopic("/main/st/sst", RECURSIVE))
+	is.True(!eSrv.HasTopic("/main/st/sst"))
+}

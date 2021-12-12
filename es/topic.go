@@ -41,6 +41,10 @@ type Topic struct {
 	// runned context
 	ctx context.Context
 
+	// context cancel function which could stop
+	// topic operations
+	cancelCtx context.CancelFunc
+
 	// topic logger
 	log zap.SugaredLogger
 }
@@ -105,6 +109,46 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 	return st.addSubtopic(name, base[1:])
 }
 
+func (t *Topic) removeSubtopic(subtopic string, recursive bool) error {
+	// t.Lock()
+	// t, ok := t.subtopics[subtopic]
+	// l := 0
+	// if ok {
+	// 	l = len(t.subtopics)
+	// }
+	// t.Unlock()
+
+	// if !ok {
+	// 	return newESErr(t.eServer, nil,
+	// 		"subtopic '%s' isn't found", subtopic)
+	// }
+
+	// if !recursive && len(t.subtopics) > 0 {
+
+	// 	return newESErr(t.eServer, nil,
+	// 		"cannot remove topic '%s' which has subtopics", subtopic)
+	// }
+	// t.Unlock()
+
+	// // remove one or all subtopic
+	// if recursive {
+	// 	for _, st := range t.subtopics {
+	// 		// if there is not specific subtopic, process all of them
+	// 		if subtopic == "" || subtopic == st.name {
+	// 			err := st.removeSubtopic("", recursive)
+	// 			if err != nil {
+	// 				return newESErr(t.eServer, err,
+	// 					"couldn't remove subtopic '%s'", st.name)
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	// // stop topic processing
+
+	return errNotImplementedYet
+}
+
 // hasSubtopic checks if topics are existed in the topic.
 //
 // if the given topics has subtopics, they would be checked
@@ -137,7 +181,7 @@ func (t *Topic) run(ctx context.Context) {
 
 	t.Lock()
 	t.runned = true
-	t.ctx = ctx
+	t.ctx, t.cancelCtx = context.WithCancel(ctx)
 	t.Unlock()
 
 	t.log.Debug("topic execution started...")
@@ -159,7 +203,7 @@ func (t *Topic) run(ctx context.Context) {
 
 // processing main topic cycle
 func (t *Topic) processTopic(ctx context.Context) {
-	for {
+	for t.isRunned() {
 		select {
 		case <-ctx.Done():
 			t.Lock()
@@ -190,6 +234,7 @@ func (t *Topic) processTopic(ctx context.Context) {
 				"evtName", ee.event.Name)
 
 			go t.updateSubs(ctx, &ee, pos)
+		default:
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package es
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -26,6 +27,11 @@ func getServer(id uuid.UUID, name string, t *testing.T) *EventServer {
 func TestTopicsTree(t *testing.T) {
 	is := is.New(t)
 	eSrv := getServer(uuid.Nil, "", t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	is.NoErr(eSrv.Run(ctx, false))
 
 	err := eSrv.AddTopic("main", "")
 	is.NoErr(err)
