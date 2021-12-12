@@ -255,39 +255,56 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 		return newESErr(eSrv, nil, "topic isn't found")
 	}
 
-	// get the topic which owns the selected one
-
-	// first element of the Split is an empty string, so drop it
+	// if it's a root topic
 	tt := strings.Split(t.fullName, "/")[1:]
-	tn := ""
-	for _, s := range tt[:len(tt)-1] {
-		tn += "/" + s
-	}
-	// the subtopic name that should be deleted
-	td := tt[len(tt)-1]
-
-	if len(tn) > 0 { // if its not a root topic
-		t, found = eSrv.hasTopic(td)
-	}
-
-	// remove topics childs if recursive or fire an error
-	if err := t.removeSubtopic(td, recursive); err != nil {
-		return newESErr(
-			eSrv, err,
-			"couldn't delete subtopic '%s' of '%s'", td, tn)
-	}
-
-	// if it's root topic, remove it
-	if len(tn) == 0 {
-		// stop the topic if it's running
-		if t.isRunned() {
-			t.cancelCtx()
+	if len(tt) == 1 {
+		// delete topic's subtopics if it's recursive
+		if err := t.removeSubtopics(recursive); err != nil {
+			return newESErr(
+				eSrv, err,
+				"couldn't remove subtopics of '%s'", topic)
 		}
 
+		// stop topic
+		t.cancelCtx()
+
+		// delete topic
 		eSrv.Lock()
 		delete(eSrv.topics, topic)
 		eSrv.Unlock()
 	}
+
+	// get the topic which owns the selected one
+	tn := ""
+	for _, s := range tt[:len(tt)-1] {
+		tn += "/" + s
+	}
+
+	// // subtopic name that should be deleted
+	// td := tt[len(tt)-1]
+
+	// if len(tn) > 0 { // if its not a root topic
+	// 	t, found = eSrv.hasTopic(td)
+	// }
+
+	// // remove topics childs if recursive or fire an error
+	// if err := t.removeSubtopic(td, recursive); err != nil {
+	// 	return newESErr(
+	// 		eSrv, err,
+	// 		"couldn't delete subtopic '%s' of '%s'", td, tn)
+	// }
+
+	// // if it's root topic, remove it
+	// if len(tn) == 0 {
+	// 	// stop the topic if it's running
+	// 	if t.isRunned() {
+	// 		t.cancelCtx()
+	// 	}
+
+	// 	eSrv.Lock()
+	// 	delete(eSrv.topics, topic)
+	// 	eSrv.Unlock()
+	// }
 
 	return nil
 }

@@ -109,44 +109,54 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 	return st.addSubtopic(name, base[1:])
 }
 
-func (t *Topic) removeSubtopic(subtopic string, recursive bool) error {
-	// t.Lock()
-	// t, ok := t.subtopics[subtopic]
-	// l := 0
-	// if ok {
-	// 	l = len(t.subtopics)
-	// }
-	// t.Unlock()
+// removes subtopics if t doesnt' have branches
+// or remove subtopics recursively.
+func (t *Topic) removeSubtopics(recursive bool) error {
+	if !recursive && !t.couldBeDeleted() {
+		return newESErr(t.eServer, nil,
+			"couldn't remove topic with subtopics tree")
+	}
 
-	// if !ok {
-	// 	return newESErr(t.eServer, nil,
-	// 		"subtopic '%s' isn't found", subtopic)
-	// }
+	// remove all subtopics
+	for _, st := range t.subtopics {
+		if err := st.removeSubtopics(recursive); err != nil {
+			return newESErr(t.eServer, err,
+				"couldn't remove subtopic '%s'", st.fullName)
+		}
 
-	// if !recursive && len(t.subtopics) > 0 {
+		// stop subtopic
+		st.cancelCtx()
 
-	// 	return newESErr(t.eServer, nil,
-	// 		"cannot remove topic '%s' which has subtopics", subtopic)
-	// }
-	// t.Unlock()
+		t.Lock()
+		delete(t.subtopics, st.name)
+		t.Unlock()
+	}
 
-	// // remove one or all subtopic
-	// if recursive {
-	// 	for _, st := range t.subtopics {
-	// 		// if there is not specific subtopic, process all of them
-	// 		if subtopic == "" || subtopic == st.name {
-	// 			err := st.removeSubtopic("", recursive)
-	// 			if err != nil {
-	// 				return newESErr(t.eServer, err,
-	// 					"couldn't remove subtopic '%s'", st.name)
-	// 			}
-	// 		}
-	// 	}
-	// }
+	return nil
+}
 
-	// // stop topic processing
+// checks if t has subtopics
+func (t *Topic) hasSubtopics() bool {
+	t.Lock()
+	defer t.Unlock()
 
-	return errNotImplementedYet
+	return len(t.subtopics) > 0
+}
+
+// checks if t could be deleted without recursion becouse
+// t doesn't have branches. It don't have subtopics or
+// has just subtopics without subtopics.
+func (t *Topic) couldBeDeleted() bool {
+	t.Lock()
+	defer t.Unlock()
+
+	for _, st := range t.subtopics {
+		if st.hasSubtopics() {
+			return false
+		}
+	}
+
+	return true
 }
 
 // hasSubtopic checks if topics are existed in the topic.
