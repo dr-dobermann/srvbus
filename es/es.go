@@ -168,14 +168,15 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 		}
 	}
 
-	eSrv.Lock()
-	defer eSrv.Unlock()
-
 	// if baseTopis is root, add it to eSrv.topics
 	if len(base) == 0 {
 		name = update2Absolute(name)
 		// check for duplicates on eSrv
-		if _, ok := eSrv.topics[name]; ok {
+		eSrv.Lock()
+		_, ok := eSrv.topics[name]
+		eSrv.Unlock()
+
+		if ok {
 			return newESErr(eSrv, nil, "topic '%s' already exists", name)
 		}
 
@@ -189,29 +190,45 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			log:       *eSrv.Logger().Named(name),
 			subs:      map[uuid.UUID][]*subscription{}}
 
+		eSrv.Lock()
 		eSrv.topics[name] = nt
+		eSrv.Unlock()
 
 		eSrv.log.Debugw("topic added to root",
 			"topic", name)
 
 		// if server is runned, run the topic too
-		if eSrv.runned {
+		if eSrv.IsRunned() {
 			nt.run(eSrv.ctx)
 		}
 
-		return nil
+		return eSrv.AddEvent(default_topic,
+			MustEvent(NewEventWithString("TOPIC_CREATED_EVT", name)),
+			eSrv.ID)
 	}
 
 	// if there is topic in eSrv.topics which is the first
 	// topic in branch then call it addSubtopic method
 	// for it and send to it all branchs slices except the first one.
 	base[0] = update2Absolute(base[0])
+	eSrv.Lock()
 	t, ok := eSrv.topics[base[0]]
+	eSrv.Unlock()
+
 	if !ok {
 		return newESErr(eSrv, nil, "no '%s' topic on server", base[0])
 	}
 
-	return t.addSubtopic(name, base[1:])
+	err := t.addSubtopic(name, base[1:])
+
+	if err != nil {
+		return newESErr(eSrv, err,
+			"couldn't add subtopic '%s' topic to '%s'", name, branch)
+	}
+
+	return eSrv.AddEvent(default_topic,
+		MustEvent(NewEventWithString("TOPIC_CREATED_EVT", name)),
+		eSrv.ID)
 }
 
 // AddTopicQueue add a whole branch of topics at once.
@@ -237,6 +254,7 @@ func (eSrv *EventServer) AddTopicQueue(
 				return newESErr(eSrv, err,
 					"couldn't add topic '%s' to '%s'", t, branch)
 			}
+
 			branch += "/" + t
 		}
 	}
@@ -276,7 +294,9 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 		eSrv.log.Debugw("root topic deleted",
 			"topic", topic)
 
-		return nil
+		return eSrv.AddEvent(default_topic,
+			MustEvent(NewEventWithString("TOPIC_DELETED_EVT", topic)),
+			eSrv.ID)
 	}
 
 	// get the topic which owns the selected one
@@ -300,7 +320,10 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 	eSrv.log.Debugw("topic deleted",
 		"topic", topic)
 
-	return nil
+	return eSrv.AddEvent(default_topic,
+		MustEvent(
+			NewEventWithString("TOPIC_DELETED_EVT", topic)),
+		eSrv.ID)
 }
 
 // AddEvent add an Event into the topic.
@@ -375,6 +398,14 @@ func (eSrv *EventServer) Subscribe(
 		if err := t.subscribe(subscriber, &s); err != nil {
 			return newESErr(eSrv, err, "subscription #%d failed", i)
 		}
+
+		if err := eSrv.AddEvent(default_topic,
+			MustEvent(NewEventWithString("SUBSCRIBED_EVT",
+				fmt.Sprintf("#%v to '%s'", subscriber, s.Topic))),
+			eSrv.ID); err != nil {
+
+			return newESErr(eSrv, err, "couldn't add topic creation event")
+		}
 	}
 
 	return nil
@@ -407,6 +438,14 @@ func (eSrv *EventServer) UnSubscribe(
 				eSrv,
 				err,
 				"unsubscription form topic %s failed", s)
+		}
+
+		if err := eSrv.AddEvent(default_topic,
+			MustEvent(NewEventWithString("UNSUBSCRIBED_EVT",
+				fmt.Sprintf("#%v to '%s'", subscriber, s))),
+			eSrv.ID); err != nil {
+
+			return newESErr(eSrv, err, "couldn't add topic creation event")
 		}
 
 	}
@@ -486,11 +525,6 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 			eSrv,
 			err,
 			"couldn't add default topic '%s'", default_topic)
-	}
-
-	// run all topics
-	for _, t := range eSrv.topics {
-		t.run(ctx)
 	}
 
 	eSrv.log.Info("event server started")

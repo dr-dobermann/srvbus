@@ -83,4 +83,6 @@ func TestTopicsTree(t *testing.T) {
 	is.True(eSrv.AddTopicQueue("ssst/sssst", "/main/st/sst") != nil)
 	// no branch
 	is.True(eSrv.AddTopicQueue("ssst/sssst", "/main/sst") != nil)
+
+	is.NoErr(eSrv.RemoveTopic("/main", RECURSIVE))
 }

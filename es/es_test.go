@@ -45,7 +45,7 @@ func TestAddingEvents(t *testing.T) {
 
 	is.NoErr(eSrv.Run(ctx, true))
 
-	is.NoErr(eSrv.AddTopicQueue("/main/subtopic/subsubtopic", "/"))
+	is.NoErr(eSrv.AddTopicQueue("main/subtopic/subsubtopic", ""))
 
 	sender := uuid.New()
 

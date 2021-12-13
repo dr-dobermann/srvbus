@@ -111,16 +111,15 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 	// add new topic to it and return
 	if len(base) == 0 {
 		t.Lock()
-		if _, ok := t.subtopics[name]; ok {
-			t.Unlock()
-
+		_, ok := t.subtopics[name]
+		t.Unlock()
+		if ok {
 			return newESErr(
 				t.eServer,
 				nil,
 				"topic '%s' already has subtopic '%s'",
 				t.fullName, name)
 		}
-		t.Unlock()
 
 		nt := &Topic{
 			eServer:   t.eServer,
@@ -152,7 +151,10 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 
 	// check if t has subtopic named as the first out of base.
 	// if it exists, add new topic as its subtopic.
+	t.Lock()
 	st, ok := t.subtopics[base[0]]
+	t.Unlock()
+
 	if !ok {
 		return newESErr(t.eServer, nil,
 			"topic '%s' has no subtopic '%s'", t.fullName, base[0])
@@ -254,29 +256,28 @@ func (t *Topic) run(ctx context.Context) {
 	t.log.Debug("topic execution started...")
 
 	// start all subtopics
-	go func() {
-		t.Lock()
-		defer t.Unlock()
+	// go func() {
+	// 	t.Lock()
+	// 	defer t.Unlock()
 
-		for _, st := range t.subtopics {
-			st.run(ctx)
-		}
-	}()
+	// 	for _, st := range t.subtopics {
+	// 		st.run(ctx)
+	// 	}
+	// }()
 
 	// register the event
 	// send event for subscribers
-	go t.processTopic(ctx)
+	go t.processTopic(t.ctx)
 }
 
 // processing main topic cycle
 func (t *Topic) processTopic(ctx context.Context) {
-	for t.isRunned() {
+	for {
 		select {
 		case <-ctx.Done():
 			t.Lock()
-			defer t.Unlock()
-
 			t.runned = false
+			t.Unlock()
 
 			t.log.Debug("topic execution stopped")
 
@@ -302,7 +303,11 @@ func (t *Topic) processTopic(ctx context.Context) {
 				"evtName", ee.event.Name)
 
 			go t.updateSubs(ctx, &ee, pos)
+
 		default:
+			if !t.isRunned() {
+				return
+			}
 		}
 	}
 }
@@ -317,7 +322,7 @@ func (t *Topic) updateSubs(ctx context.Context, ee *EventEnvelope, pos int) {
 		ss := sl
 
 		go func() {
-			// go throug one subscriber subsciptions
+			// go through one subscriber subsciptions
 			for _, s := range ss {
 				s := s
 				go s.sendEvent(ctx, ee, pos)
