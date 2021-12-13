@@ -272,6 +272,8 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 		eSrv.Lock()
 		delete(eSrv.topics, topic)
 		eSrv.Unlock()
+
+		return nil
 	}
 
 	// get the topic which owns the selected one
@@ -280,31 +282,17 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 		tn += "/" + s
 	}
 
-	// // subtopic name that should be deleted
-	// td := tt[len(tt)-1]
+	// subtopic name that should be deleted
+	dt := tt[len(tt)-1]
 
-	// if len(tn) > 0 { // if its not a root topic
-	// 	t, found = eSrv.hasTopic(td)
-	// }
+	t, found = eSrv.hasTopic(tn)
+	if !found {
+		return newESErr(eSrv, nil, "couldn't find topic '%s'", tn)
+	}
 
-	// // remove topics childs if recursive or fire an error
-	// if err := t.removeSubtopic(td, recursive); err != nil {
-	// 	return newESErr(
-	// 		eSrv, err,
-	// 		"couldn't delete subtopic '%s' of '%s'", td, tn)
-	// }
-
-	// // if it's root topic, remove it
-	// if len(tn) == 0 {
-	// 	// stop the topic if it's running
-	// 	if t.isRunned() {
-	// 		t.cancelCtx()
-	// 	}
-
-	// 	eSrv.Lock()
-	// 	delete(eSrv.topics, topic)
-	// 	eSrv.Unlock()
-	// }
+	if err := t.removeSubtopic(dt, recursive); err != nil {
+		return newESErr(eSrv, err, "couldn't remove topic '%s'", topic)
+	}
 
 	return nil
 }

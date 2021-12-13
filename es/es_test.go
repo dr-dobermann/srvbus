@@ -119,4 +119,6 @@ func TestTopicsManagement(t *testing.T) {
 
 	is.NoErr(eSrv.RemoveTopic("/main/st/sst", RECURSIVE))
 	is.True(!eSrv.HasTopic("/main/st/sst"))
+
+	is.True(eSrv.RemoveTopic("/main", ONLY_ONE_TOPIC) != nil)
 }
