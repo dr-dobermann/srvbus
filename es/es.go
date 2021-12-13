@@ -259,7 +259,7 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 	tt := strings.Split(t.fullName, "/")[1:]
 	if len(tt) == 1 {
 		// delete topic's subtopics if it's recursive
-		if err := t.removeSubtopics(recursive); err != nil {
+		if err := t.removeSubtopics("", recursive); err != nil {
 			return newESErr(
 				eSrv, err,
 				"couldn't remove subtopics of '%s'", topic)
@@ -272,6 +272,9 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 		eSrv.Lock()
 		delete(eSrv.topics, topic)
 		eSrv.Unlock()
+
+		eSrv.log.Debugw("root topic deleted",
+			"topic", topic)
 
 		return nil
 	}
@@ -290,9 +293,12 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 		return newESErr(eSrv, nil, "couldn't find topic '%s'", tn)
 	}
 
-	if err := t.removeSubtopic(dt, recursive); err != nil {
+	if err := t.removeSubtopics(dt, recursive); err != nil {
 		return newESErr(eSrv, err, "couldn't remove topic '%s'", topic)
 	}
+
+	eSrv.log.Debugw("topic deleted",
+		"topic", topic)
 
 	return nil
 }
@@ -402,6 +408,7 @@ func (eSrv *EventServer) UnSubscribe(
 				err,
 				"unsubscription form topic %s failed", s)
 		}
+
 	}
 
 	return nil
@@ -490,3 +497,6 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 
 	return nil
 }
+
+// =============================================================================
+//                              Statistics

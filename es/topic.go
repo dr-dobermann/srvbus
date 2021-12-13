@@ -63,19 +63,20 @@ func (t *Topic) isRunned() bool {
 // This slice doesnt consist of t.Name only the topics which are under
 // the t.
 func (t *Topic) addSubtopic(name string, base []string) error {
-	t.Lock()
-	defer t.Unlock()
-
 	// if current Topic is the last one in the base,
 	// add new topic to it and return
 	if len(base) == 0 {
+		t.Lock()
 		if _, ok := t.subtopics[name]; ok {
+			t.Unlock()
+
 			return newESErr(
 				t.eServer,
 				nil,
 				"topic '%s' already has subtopic '%s'",
 				t.fullName, name)
 		}
+		t.Unlock()
 
 		nt := &Topic{
 			eServer:   t.eServer,
@@ -86,9 +87,16 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 			inCh:      make(chan EventEnvelope),
 			log:       *t.eServer.log.Named(t.fullName),
 			subs:      map[uuid.UUID][]*subscription{}}
+
+		t.Lock()
+
 		t.subtopics[name] = nt
 
-		if t.runned {
+		runned := t.runned
+
+		t.Unlock()
+
+		if runned {
 			nt.run(t.ctx)
 		}
 
@@ -109,17 +117,30 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 	return st.addSubtopic(name, base[1:])
 }
 
-// removes subtopics if t doesnt' have branches
+// removes one or all subtopics if t doesnt' have branches
 // or remove subtopics recursively.
-func (t *Topic) removeSubtopics(recursive bool) error {
-	if !recursive && !t.couldBeDeleted() {
+//
+// if topic isn't empty string, then removing only one subtopic
+// and all its subtopics if recursive.
+func (t *Topic) removeSubtopics(topic string, recursive bool) error {
+	t.Lock()
+	if !recursive &&
+		((topic != "" && len(t.subtopics[topic].subtopics) > 0) ||
+			(topic == "" && !t.couldBeDeleted())) {
+		t.Unlock()
+
 		return newESErr(t.eServer, nil,
 			"couldn't remove topic with subtopics tree")
 	}
+	t.Unlock()
 
-	// remove all subtopics
+	// remove one or all subtopics
 	for _, st := range t.subtopics {
-		if err := st.removeSubtopics(recursive); err != nil {
+		if topic != "" && st.name != topic {
+			continue
+		}
+
+		if err := st.removeSubtopics("", recursive); err != nil {
 			return newESErr(t.eServer, err,
 				"couldn't remove subtopic '%s'", st.fullName)
 		}
@@ -130,28 +151,20 @@ func (t *Topic) removeSubtopics(recursive bool) error {
 		t.Lock()
 		delete(t.subtopics, st.name)
 		t.Unlock()
+
+		t.log.Debugw("subtopic deleted",
+			"topic", st.name)
 	}
 
 	return nil
-}
-
-// checks if t has subtopics
-func (t *Topic) hasSubtopics() bool {
-	t.Lock()
-	defer t.Unlock()
-
-	return len(t.subtopics) > 0
 }
 
 // checks if t could be deleted without recursion becouse
 // t doesn't have branches. It don't have subtopics or
 // has just subtopics without subtopics.
 func (t *Topic) couldBeDeleted() bool {
-	t.Lock()
-	defer t.Unlock()
-
 	for _, st := range t.subtopics {
-		if st.hasSubtopics() {
+		if len(st.subtopics) > 0 {
 			return false
 		}
 	}
@@ -159,49 +172,16 @@ func (t *Topic) couldBeDeleted() bool {
 	return true
 }
 
-// removes single subtopics with checking for branch and with
-// recursion if needed.
-func (t *Topic) removeSubtopic(topic string, recursive bool) error {
-	t.Lock()
-	st, ok := t.subtopics[topic]
-	t.Unlock()
-
-	if !ok {
-		return newESErr(t.eServer, nil, "no subtopic '%s'", topic)
-	}
-
-	if !recursive && !st.couldBeDeleted() {
-		return newESErr(t.eServer, nil, "'%s' topic branch", topic)
-	}
-
-	if recursive {
-		if err := st.removeSubtopics(recursive); err != nil {
-			return newESErr(t.eServer, err,
-				"couldn't remove subtopics for '%s'", topic)
-		}
-	}
-
-	// stop subtopic
-	st.cancelCtx()
-
-	// remove it
-	t.Lock()
-	delete(t.subtopics, topic)
-	t.Unlock()
-
-	return nil
-}
-
 // hasSubtopic checks if topics are existed in the topic.
 //
 // if the given topics has subtopics, they would be checked
 // over recursive calls of its hasSubtopic.
 func (t *Topic) hasSubtopic(topics []string) (*Topic, bool) {
-	t.Lock()
-	defer t.Unlock()
-
 	// check if t owns the first topic in the topics
+	t.Lock()
 	st, ok := t.subtopics[topics[0]]
+	t.Unlock()
+
 	if !ok {
 		return nil, false
 	}
@@ -250,8 +230,9 @@ func (t *Topic) processTopic(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			t.Lock()
+			defer t.Unlock()
+
 			t.runned = false
-			t.Unlock()
 
 			t.log.Debug("topic execution stopped")
 
