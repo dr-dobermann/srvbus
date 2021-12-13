@@ -159,6 +159,39 @@ func (t *Topic) couldBeDeleted() bool {
 	return true
 }
 
+// removes single subtopics with checking for branch and with
+// recursion if needed.
+func (t *Topic) removeSubtopic(topic string, recursive bool) error {
+	t.Lock()
+	st, ok := t.subtopics[topic]
+	t.Unlock()
+
+	if !ok {
+		return newESErr(t.eServer, nil, "no subtopic '%s'", topic)
+	}
+
+	if !recursive && !st.couldBeDeleted() {
+		return newESErr(t.eServer, nil, "'%s' topic branch", topic)
+	}
+
+	if recursive {
+		if err := st.removeSubtopics(recursive); err != nil {
+			return newESErr(t.eServer, err,
+				"couldn't remove subtopics for '%s'", topic)
+		}
+	}
+
+	// stop subtopic
+	st.cancelCtx()
+
+	// remove it
+	t.Lock()
+	delete(t.subtopics, topic)
+	t.Unlock()
+
+	return nil
+}
+
 // hasSubtopic checks if topics are existed in the topic.
 //
 // if the given topics has subtopics, they would be checked
