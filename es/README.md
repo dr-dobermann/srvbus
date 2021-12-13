@@ -30,7 +30,10 @@ If there were no error, to start server run its `Run` method. This method takes 
 
 Event Server could rerun after its stopping. Just call `Run` method.
 
-If clean start was choosen all previously created topics will be lost.
+If clean start was choosen all previously created topics will be lost. 
+
+On the start or clean run of the Event Server internal topic `/server` is created. It takes internal events of the server: creating `TOPIC_CREATED_EVT` and deleting `TOPIC_DELETED_EVT` topics, open `SUBSCRIBED_EVT` and cancel `UNSUBSCRIBED_EVT` subscription. In case of necessity of tracking such events, just subscribe for the `/server` topic and get interesting events.
+Details of the events are in the `data` field of the events. To get them, `Data()` method or `io.Reader` interface of the Event could be used.
 
 ## Adding, processing and removing topics
 
