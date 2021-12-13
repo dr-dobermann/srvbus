@@ -12,15 +12,15 @@ import (
 
 // Filter provides simple test for byte stream
 type Filter interface {
-	check(name string, data []byte) bool
+	check(ee EventEnvelope) bool
 }
 
 // filterFunc checks bytestream for internal conditions.
-type filterFunc func(name string, data []byte) bool
+type filterFunc func(ee EventEnvelope) bool
 
 // Implementation of Filter interface for filterFunc.
-func (f filterFunc) check(name string, data []byte) bool {
-	return f(name, data)
+func (f filterFunc) check(ee EventEnvelope) bool {
+	return f(ee)
 }
 
 const (
@@ -153,7 +153,7 @@ func (s *subscription) filter(ee *EventEnvelope) *EventEnvelope {
 		go func() {
 			s.Lock()
 			defer s.Unlock()
-			res := f.check(ee.event.Name, ee.event.Data())
+			res := f.check(*ee)
 			if !res {
 
 				*filterFail = true
@@ -184,8 +184,8 @@ func (s *subscription) filter(ee *EventEnvelope) *EventEnvelope {
 
 // Has returns filter which checks if name is equal with event name.
 func WithName(name string) Filter {
-	filter := func(n string, _ []byte) bool {
-		return n == name
+	filter := func(ee EventEnvelope) bool {
+		return name == ee.event.Name
 	}
 
 	return filterFunc(filter)
@@ -193,8 +193,8 @@ func WithName(name string) Filter {
 
 // WhithSubMame checks if event name has str in it.
 func WithSubName(str string) Filter {
-	filter := func(n string, _ []byte) bool {
-		return strings.Contains(n, str)
+	filter := func(ee EventEnvelope) bool {
+		return strings.Contains(ee.event.Name, str)
 	}
 
 	return filterFunc(filter)
@@ -202,8 +202,8 @@ func WithSubName(str string) Filter {
 
 // WithSubData checks if Event data consists dat in it.
 func WithSubData(dat []byte) Filter {
-	filter := func(_ string, data []byte) bool {
-		return bytes.Contains(data, dat)
+	filter := func(ee EventEnvelope) bool {
+		return bytes.Contains(ee.event.Data(), dat)
 	}
 
 	return filterFunc(filter)
@@ -211,8 +211,8 @@ func WithSubData(dat []byte) Filter {
 
 // WithSubstr checks if Event data consists str in it.
 func WithSubstr(str string) Filter {
-	filter := func(_ string, data []byte) bool {
-		return bytes.Contains(data, []byte(str))
+	filter := func(ee EventEnvelope) bool {
+		return bytes.Contains(ee.event.Data(), []byte(str))
 	}
 
 	return filterFunc(filter)
