@@ -123,6 +123,10 @@ func TestSubscriptions(t *testing.T) {
 	is.Equal(len(validEvents), 0)
 	m.Unlock()
 
+	for _, ti := range eSrv.Statistics() {
+		fmt.Println(ti.String())
+	}
+
 	// unsubscribe from topics "/main"
 	is.NoErr(eSrv.UnSubscribe(subscriber, mnt))
 

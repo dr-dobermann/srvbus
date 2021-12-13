@@ -2,6 +2,7 @@ package es
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -55,6 +56,49 @@ func (t *Topic) isRunned() bool {
 	defer t.Unlock()
 
 	return t.runned
+}
+
+// return envents count in the topic
+func (t *Topic) count() int {
+	t.Lock()
+	defer t.Unlock()
+
+	return len(t.events)
+}
+
+// returns subtopics statistics list
+func (t *Topic) getSubtopics() []TopicInfo {
+	res := []TopicInfo{}
+
+	t.Lock()
+	defer t.Unlock()
+
+	for _, st := range t.subtopics {
+		res = append(res, TopicInfo{
+			Name:        st.name,
+			FullName:    st.fullName,
+			Runned:      st.isRunned(),
+			Events:      st.count(),
+			Subtopics:   st.getSubtopics(),
+			Subscribers: st.getSubscribers(),
+		})
+	}
+
+	return res
+}
+
+// returns list of subscribers for the topic
+func (t *Topic) getSubscribers() []uuid.UUID {
+	res := []uuid.UUID{}
+
+	t.Lock()
+	defer t.Unlock()
+
+	for sb := range t.subs {
+		res = append(res, sb)
+	}
+
+	return res
 }
 
 // addSubtopic adds a new subtopic if there is no duplicates.
@@ -398,4 +442,31 @@ func update2Absolute(path string) string {
 	}
 
 	return path
+}
+
+// converts ti into string.
+func str(ti TopicInfo, offset int) string {
+	offs := strings.Repeat(" ", offset*2)
+
+	res := offs + ti.FullName
+
+	if ti.Runned {
+		res += " [Runned]"
+	} else {
+		res += " [Not runned]"
+	}
+
+	res += fmt.Sprintf(" events(%d)\n%s  subscribers:\n", ti.Events, offs)
+
+	for _, sb := range ti.Subscribers {
+		res += offs + "    " + sb.String() + "\n"
+	}
+
+	res += offs + "  subtopics:\n"
+
+	for _, st := range ti.Subtopics {
+		res += offs + str(st, offset+1) + "\n"
+	}
+
+	return res
 }

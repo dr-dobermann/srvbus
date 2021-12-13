@@ -500,3 +500,38 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 
 // =============================================================================
 //                              Statistics
+//
+type TopicInfo struct {
+	Name        string
+	FullName    string
+	Runned      bool
+	Events      int
+	Subtopics   []TopicInfo
+	Subscribers []uuid.UUID
+}
+
+// Statistics returns Event Server statistics
+func (eSrv *EventServer) Statistics() []TopicInfo {
+	res := []TopicInfo{}
+	eSrv.Lock()
+	defer eSrv.Unlock()
+
+	for _, t := range eSrv.topics {
+		res = append(res,
+			TopicInfo{
+				Name:        t.name,
+				FullName:    t.fullName,
+				Runned:      t.isRunned(),
+				Events:      t.count(),
+				Subtopics:   t.getSubtopics(),
+				Subscribers: t.getSubscribers()})
+	}
+
+	return res
+}
+
+// String implements fmt.Stringer for TopicInfo
+func (ti TopicInfo) String() string {
+
+	return str(ti, 0)
+}
