@@ -18,7 +18,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	mSrv, err := ms.New(uuid.New(), "myserver", log.Sugar())
+	mSrv, err := ms.New(uuid.New(), "myserver", log.Sugar(), nil)
 	if mSrv == nil || err != nil {
 		panic("couldn't create a message server")
 	}

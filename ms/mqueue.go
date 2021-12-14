@@ -3,7 +3,6 @@ package ms
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -43,6 +42,8 @@ type queueMessagesRequest struct {
 // Message Queue
 type mQueue struct {
 	sync.Mutex
+
+	mSrv *MessageServer
 
 	Name     string
 	messages []*MessageEnvelope
@@ -113,6 +114,11 @@ func (q *mQueue) loop(ctx context.Context) {
 			q.messages = append(q.messages, me)
 			q.Unlock()
 
+			q.mSrv.emitEvent("NEW_MSG_EVT",
+				fmt.Sprintf(
+					"{queue: \"%s\", msg_name: \"%s\", msg_sender: \"%v\"",
+					q.Name, me.Name, me.Sender))
+
 			q.log.Debugw("message registered",
 				"msgID", me.Name,
 				"key", me.Name)
@@ -160,18 +166,14 @@ func (q *mQueue) loop(ctx context.Context) {
 func newQueue(
 	ctx context.Context,
 	name string,
-	log *zap.SugaredLogger) (*mQueue, error) {
-
-	name = strings.Trim(name, " ")
-	if name == "" {
-		return nil, fmt.Errorf("no name for a new queue")
-	}
+	mSrv *MessageServer) (*mQueue, error) {
 
 	q := mQueue{
 		Name:       name,
 		messages:   make([]*MessageEnvelope, 0),
 		lastReaded: make(map[uuid.UUID]int),
-		log:        log.Named(name),
+		mSrv:       mSrv,
+		log:        mSrv.log.Named(name),
 		regCh:      make(chan msgRegRequest),
 		mReqCh:     make(chan queueMessagesRequest)}
 
@@ -182,8 +184,11 @@ func newQueue(
 
 	go q.loop(ctx)
 
-	log.Debugw("new message queue is created",
+	q.log.Debugw("new message queue is created",
 		"queue", name)
+
+	q.mSrv.emitEvent("NEW_QUEUE_EVT",
+		fmt.Sprintf("{queue: \"%s\"", q.Name))
 
 	return &q, nil
 }

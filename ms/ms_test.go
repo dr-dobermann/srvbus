@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dr-dobermann/srvbus/es"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"go.uber.org/zap"
@@ -22,8 +23,13 @@ func TestMSrv(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	eSrv, err := es.New(uuid.New(), "EVT_SRV", sugar)
+	is.NoErr(err)
+	is.True(eSrv != nil)
+	is.NoErr(eSrv.Run(ctx, false))
+
 	const msn = "test_mserver"
-	ms, err := New(uuid.Nil, msn, sugar)
+	ms, err := New(uuid.Nil, msn, sugar, eSrv)
 	is.NoErr(err)
 	is.True(ms != nil)
 

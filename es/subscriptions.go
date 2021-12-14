@@ -10,12 +10,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// Filter provides simple test for byte stream
+// Filter provides simple test for EventEnvelope
 type Filter interface {
 	check(ee EventEnvelope) bool
 }
 
-// filterFunc checks bytestream for internal conditions.
+// filterFunc checks EventEnvelope for internal conditions.
 type filterFunc func(ee EventEnvelope) bool
 
 // Implementation of Filter interface for filterFunc.

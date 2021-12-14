@@ -14,6 +14,8 @@ The Message Server has a very simple API. To create a new Message Server just ca
 
 if logger isn't presented then error would be returned. If id or name weren't given, they will be created automatically.
 
+If the message server was created with non-empty Event Server reference, then events sends to the  `/mserver/id-of-the-message-server` topic where "id-of-the-message-server" is a message server id. When server created, runned or stopped events `MSERVER_CREATED_EVT`, `MSERVER_STARTED_EVT` and `MSERVER_STOPPED_EVT` were emitted.
+
 Once the server is created it should be run with `Run` method with appropriate context. Run checks if the server is already runned. If so it's just returns back.
 
 In case the Server is stopped early, all the queues created in the previous session will be deleted before new run.
@@ -22,9 +24,13 @@ After the server is created its possible to Put messages into it and Get message
 
 ## Putting messages to the server
 
-To put messages `PutMessages` method of MessageServer should be invoked. Current realization doesn't provide direct queues management. When messages are putting into the server, the name of queue should be given. If there is no queue with the given name, then the new queue will be created. When messages are putting into the queue, the sender id of these messages should be provided.
+To put messages `PutMessages` method of MessageServer should be invoked. Current realization doesn't provide direct queues management. When messages are putting into the server, the name of queue should be given. If there is no queue with the given name, then the new queue will be created. If event server is given while message server creation, then `NEW_QUEUE_EVT` will fired.
 
-`PutMessages` consumes variadic number of messages and all of them are storing into the same queue in the FIFO order. 
+When messages are putting into the queue, the sender id of these messages should be provided.
+
+`PutMessages` consumes variadic number of messages and all of them are storing into the same queue in the FIFO order.
+
+if event server is present then after message registration in the queue new `NEW_MSG_EVT` will fired.
 
 ## Getting messages from the server
 

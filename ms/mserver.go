@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dr-dobermann/srvbus/es"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -39,6 +40,50 @@ type MessageServer struct {
 	ctx context.Context
 
 	runned bool
+
+	eSrv     *es.EventServer
+	es_topic string
+}
+
+// emits single event into the personal message server topic
+// if the Event Server was given on New call.
+func (mSrv *MessageServer) emitEvent(name, descr string) {
+	if mSrv.eSrv == nil {
+		return
+	}
+
+	// initialize default server topic if needed
+	if mSrv.es_topic == "" {
+		topic := "/mserver/" + mSrv.id.String()
+		if err := mSrv.eSrv.AddTopicQueue(topic, "/"); err != nil {
+			mSrv.log.Warnw("couldn't add topic to Event Server",
+				"eSrvName", mSrv.eSrv.Name,
+				"eSrvID", mSrv.eSrv.ID,
+				"topic", topic,
+				"err", err)
+			return
+		}
+		mSrv.es_topic = topic
+	}
+
+	evt, err := es.NewEventWithString(name, descr)
+	if err != nil {
+		mSrv.log.Warnw("couldn't create an event",
+			"eSrvName", mSrv.eSrv.Name,
+			"eSrvID", mSrv.eSrv.ID,
+			"evt_name", name,
+			"err", err)
+		return
+	}
+
+	if err := mSrv.eSrv.AddEvent(mSrv.es_topic, evt, mSrv.id); err != nil {
+		mSrv.log.Warnw("couldn't register an event",
+			"eSrvName", mSrv.eSrv.Name,
+			"eSrvID", mSrv.eSrv.ID,
+			"evt_name", name,
+			"err", err)
+		return
+	}
 }
 
 // IsRunned returns the current running state of the MessageServer.
@@ -92,7 +137,9 @@ func (mSrv *MessageServer) HasQueue(queue string) bool {
 func New(
 	id uuid.UUID,
 	name string,
-	log *zap.SugaredLogger) (*MessageServer, error) {
+	log *zap.SugaredLogger,
+	eSrv *es.EventServer) (*MessageServer, error) {
+
 	if log == nil {
 		return nil, fmt.Errorf("logger isn't present")
 	}
@@ -108,9 +155,13 @@ func New(
 	ms := &MessageServer{
 		id:   id,
 		Name: name,
-		log:  log.Named("MS: " + name + "#" + id.String())}
+		log:  log.Named("MS: " + name + "#" + id.String()),
+		eSrv: eSrv}
 
 	log.Debug("message server created")
+
+	ms.emitEvent("MSERVER_CREATED_EVT",
+		fmt.Sprintf("{name: \"%s\", id: \"%s\"", name, id))
 
 	return ms, nil
 }
@@ -132,6 +183,9 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 
 	mSrv.log.Info("server started")
 
+	mSrv.emitEvent("MSERVER_STARTED_EVT",
+		fmt.Sprintf("{name: \"%s\", id: \"%s\"", mSrv.Name, mSrv.id))
+
 	go func() {
 		<-ctx.Done()
 
@@ -142,6 +196,9 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 		mSrv.Unlock()
 
 		mSrv.log.Info("server stopped")
+
+		mSrv.emitEvent("MSERVER_STOPPED_EVT",
+			fmt.Sprintf("{name: \"%s\", id: \"%s\"", mSrv.Name, mSrv.id))
 	}()
 }
 
@@ -182,7 +239,7 @@ func (mSrv *MessageServer) PutMessages(
 
 	q, ok := mSrv.queues[queue]
 	if !ok {
-		nq, err := newQueue(mSrv.ctx, queue, mSrv.log)
+		nq, err := newQueue(mSrv.ctx, queue, mSrv)
 		if err != nil {
 			mSrv.log.Errorw("couldn't put messages",
 				"queue", queue,
@@ -245,7 +302,8 @@ func (mSrv *MessageServer) GetMessages(
 // controlled outside the WaitForQueue over the context.
 //
 // If the queue appears while waiting time the channel got true.
-// If timeout is exceeded the false will put into the channel
+// If timeout is exceeded or context cancelled the false will put
+// into the channel
 //
 // For example, if it's needed to wait for queue appears no more
 // than 2 seconds, the context should be created as followed:
