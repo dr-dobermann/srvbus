@@ -255,16 +255,6 @@ func (t *Topic) run(ctx context.Context) {
 
 	t.log.Debug("topic execution started...")
 
-	// start all subtopics
-	// go func() {
-	// 	t.Lock()
-	// 	defer t.Unlock()
-
-	// 	for _, st := range t.subtopics {
-	// 		st.run(ctx)
-	// 	}
-	// }()
-
 	// register the event
 	// send event for subscribers
 	go t.processTopic(t.ctx)
