@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dr-dobermann/srvbus/es"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -106,6 +107,9 @@ type ServiceServer struct {
 	svcRunCh chan uuid.UUID
 
 	runned bool
+
+	eSrv     *es.EventServer
+	es_topic string
 }
 
 func (sSrv *ServiceServer) IsRunned() bool {
@@ -121,11 +125,53 @@ type svcRes struct {
 	err error
 }
 
+// emits single event into the personal message server topic
+// if the Event Server was given on New call.
+func (sSrv *ServiceServer) emitEvent(name, descr string) {
+	if sSrv.eSrv == nil {
+		return
+	}
+
+	// initialize default server topic if needed
+	if sSrv.es_topic == "" {
+		topic := "/s2/" + sSrv.ID.String()
+		if err := sSrv.eSrv.AddTopicQueue(topic, "/"); err != nil {
+			sSrv.log.Warnw("couldn't add topic to Event Server",
+				"eSrvName", sSrv.eSrv.Name,
+				"eSrvID", sSrv.eSrv.ID,
+				"topic", topic,
+				"err", err)
+			return
+		}
+		sSrv.es_topic = topic
+	}
+
+	evt, err := es.NewEventWithString(name, descr)
+	if err != nil {
+		sSrv.log.Warnw("couldn't create an event",
+			"eSrvName", sSrv.eSrv.Name,
+			"eSrvID", sSrv.eSrv.ID,
+			"evt_name", name,
+			"err", err)
+		return
+	}
+
+	if err := sSrv.eSrv.AddEvent(sSrv.es_topic, evt, sSrv.ID); err != nil {
+		sSrv.log.Warnw("couldn't register an event",
+			"eSrvName", sSrv.eSrv.Name,
+			"eSrvID", sSrv.eSrv.ID,
+			"evt_name", name,
+			"err", err)
+		return
+	}
+}
+
 // New creates a new ServiceServer and returns its pointer.
 func New(
 	id uuid.UUID,
 	name string,
-	log *zap.SugaredLogger) (*ServiceServer, error) {
+	log *zap.SugaredLogger,
+	eSrv *es.EventServer) (*ServiceServer, error) {
 
 	if log == nil {
 		return nil, fmt.Errorf("logger isn't presented")
@@ -145,6 +191,9 @@ func New(
 	sSrv.log = log.Named("S2: " + sSrv.Name +
 		" #" + sSrv.ID.String())
 	sSrv.services = make(map[uuid.UUID]*serviceRecord)
+	sSrv.eSrv = eSrv
+
+	sSrv.emitEvent("SSERVER_CREATED", "{name: \""+sSrv.Name+"\"}")
 
 	sSrv.log.Debug("service server created")
 
@@ -186,6 +235,11 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 			go func() {
 				sr.setState(SSRunning, nil)
 
+				sSrv.emitEvent("SVC_STARTS_EVT",
+					fmt.Sprintf(
+						"{name: \"%s\", id: \"%v\"}",
+						sr.name, sr.id))
+
 				sSrv.log.Infow("service started",
 					"svc ID", id)
 
@@ -202,6 +256,11 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 				}
 
 				sr.setState(SSEnded, nil)
+
+				sSrv.emitEvent("SVC_ENDS_EVT",
+					fmt.Sprintf(
+						"{name: \"%s\", id: \"%v\", state: \"%d:%s\"}",
+						sr.name, sr.id, sr.state, sr.state.String()))
 
 				sSrv.log.Infow("service ended",
 					"svc ID", id)
@@ -231,6 +290,8 @@ func (sSrv *ServiceServer) Run(ctx context.Context) error {
 
 	sSrv.log.Info("server started")
 
+	sSrv.emitEvent("SSERVER_STARTED_EVT", "")
+
 	return nil
 }
 
@@ -251,15 +312,22 @@ func (sSrv *ServiceServer) AddService(
 		name = "Service #" + id.String()
 	}
 
-	sSrv.Lock()
-	sSrv.services[id] = &serviceRecord{
+	sr := &serviceRecord{
 		id:          id,
 		name:        name,
 		svc:         s,
 		state:       SSRegistered,
 		lastError:   nil,
 		stopChannel: stopCh}
+
+	sSrv.Lock()
+	sSrv.services[id] = sr
 	sSrv.Unlock()
+
+	sSrv.emitEvent("SVC_ADDED_EVT",
+		fmt.Sprintf(
+			"{name: \"%s\", id: \"%v\"}",
+			sr.name, sr.id))
 
 	sSrv.log.Debugw("new service registered",
 		"svc ID", id,

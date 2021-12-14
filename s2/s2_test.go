@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dr-dobermann/srvbus/es"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
 	"go.uber.org/zap"
@@ -23,16 +24,21 @@ func TestSvcServer(t *testing.T) {
 		name string
 	}{uuid.New(), "ServiceServer"}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	eSrv, err := es.New(uuid.New(), "EVT_SRV", log.Sugar())
+	is.NoErr(err)
+	is.True(eSrv != nil)
+	is.NoErr(eSrv.Run(ctx, false))
+
 	// server creation and running
-	sSrv, err := New(srvID.id, srvID.name, log.Sugar())
+	sSrv, err := New(srvID.id, srvID.name, log.Sugar(), eSrv)
 	is.NoErr(err)
 	is.True(sSrv != nil)
 
 	is.Equal(srvID.id.String(), sSrv.ID.String())
 	is.Equal(srvID.name, sSrv.Name)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	err = sSrv.Run(ctx)
 	is.NoErr(err)

@@ -21,7 +21,7 @@ func main() {
 	sl := log.Sugar()
 
 	// create a new Service Server
-	sSrv, err := s2.New(uuid.Nil, "s2 server", sl)
+	sSrv, err := s2.New(uuid.Nil, "s2 server", sl, nil)
 	if err != nil {
 		panic("couldn't create a s3 server")
 	}
@@ -33,7 +33,7 @@ func main() {
 	sSrv.Run(ctx)
 
 	// create a new Message Server for support message interchange
-	mSrv, err := ms.New(uuid.Nil, "msgSrv", sl)
+	mSrv, err := ms.New(uuid.Nil, "msgSrv", sl, nil)
 	if err != nil {
 		panic("couldn't create message server: " + err.Error())
 	}

@@ -128,7 +128,7 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 			events:    []EventEnvelope{},
 			subtopics: map[string]*Topic{},
 			inCh:      make(chan EventEnvelope),
-			log:       *t.eServer.log.Named(t.fullName),
+			log:       *t.log.Named(name),
 			subs:      map[uuid.UUID][]*subscription{}}
 
 		t.Lock()

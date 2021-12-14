@@ -52,7 +52,8 @@ func TestPutGetMessagesSvc(t *testing.T) {
 	mSrv, err := ms.New(
 		uuid.New(),
 		"Test MsgSrv",
-		log.Sugar())
+		log.Sugar(),
+		nil)
 	is.NoErr(err)
 	is.True(mSrv != nil)
 
