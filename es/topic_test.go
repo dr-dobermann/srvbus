@@ -49,13 +49,15 @@ func TestTopicsTree(t *testing.T) {
 		err := eSrv.AddTopic("main", "/")
 		is.True(err != nil)
 
-		// add duplicate topic
-		is.True(eSrv.AddTopic("subsubtopic", "/main/subtopic/") != nil)
-
 		// check EventServiceError Error()
 		if err != nil {
 			fmt.Println(err.Error())
 		}
+
+		// add duplicate topic
+		is.True(eSrv.AddTopic("subsubtopic", "/main/subtopic/") != nil)
+
+		is.True(eSrv.AddTopic("/subt/test_topic", "/main") != nil)
 
 		// add to invalid tree
 		is.True(eSrv.AddTopic("subtopic", "/mani") != nil)

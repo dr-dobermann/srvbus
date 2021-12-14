@@ -159,6 +159,31 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 		return newESErr(eSrv, nil, "empty topic name is not allowed")
 	}
 
+	// normalize name. It should only consists the topic name.
+	// if there are leading topics in name they should be movet to the
+	// end of the branch.
+	//
+	// So name="/topic/subtopic", branch="/main" should become
+	// name="subtopic", branch=/main/topic
+	nn := strings.Split(name, "/")
+	var pos int
+	for pos = len(nn) - 1; pos > 0; pos-- {
+		if len(nn[pos]) > 0 {
+			name = nn[pos]
+			break
+		}
+	}
+
+	if pos < 0 {
+		return newESErr(eSrv, nil, "invalid topic name '%s'", name)
+	}
+
+	for i := 0; i < pos; i++ {
+		if len(nn[i]) > 0 {
+			branch += "/" + nn[i]
+		}
+	}
+
 	// parse branch
 	base := []string{}
 	for _, t := range strings.Split(branch, "/") {
