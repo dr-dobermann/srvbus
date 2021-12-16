@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+option go_package = "/sb_grpc";
+
+package sb_grpc;
+
+/*
+  generator string on ms-windows
+
+  protoc --go_out=.\pkg --go-grpc_out=.\pkg .\proto\srvbus.proto
+*/
+
+// =============================================================================
+// Message Server api
+service Messenger {
+    rpc GetServer( MServerReq ) returns ( MServer ) {}
+    rpc SendMessage( SendMsgRequest ) returns ( SendMsgResponse ) {}
+    rpc GetMessages( MessageRequest ) returns ( stream Message ) {}
+    rpc HasQueue( QueueRequest ) returns ( QueueResponse ) {}
+}
+
+message MServerReq {
+    string id               = 1;
+}
+
+message MServer {
+    string id               = 1;
+}
+
+message SendMsgRequest {
+    string serverID         = 1;
+    string queue            = 2;
+    string msgName          = 3;
+    string msg              = 4;
+    string senderID         = 5;
+}
+
+message SendMsgResponse {
+    string msgID            = 1;
+}
+
+message MessageRequest {
+    string serverID         = 1;
+    string queue            = 2;
+}
+
+message Message {
+    string msgID            = 1;
+    string name             = 2;
+    string data             = 3;
+    string at               = 4;
+    string senderID         = 5;
+}
+
+message QueueRequest {
+    string name             = 1;
+}
+
+message QueueResponse {
+    bool state              = 1;
+}
