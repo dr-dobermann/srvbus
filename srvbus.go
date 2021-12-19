@@ -123,11 +123,11 @@ func (sb *ServiceBus) Run(ctx context.Context) error {
 		}
 	}
 
-	evt, err := es.NewEventWithString(
-		"SB_STARTED_EVT", 
-		fmt.Sprintf("{id: \"%v\"}", sb.id))
-	if err != nil 
-	sb.eSrv.AddEvent(sb.topic, )
-	
+	// evt, err := es.NewEventWithString(
+	// 	"SB_STARTED_EVT",
+	// 	fmt.Sprintf("{id: \"%v\"}", sb.id))
+	// if err != nil
+	// sb.eSrv.AddEvent(sb.topic, )
+
 	return nil
 }

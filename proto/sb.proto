@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+option go_package = "/sb_proto";
+
+package srvbus_proto;
+
+service SrvBus {
+    // checks if there is a MessageServer with given ID
+    // or asking for available MessageServer (if id in request 
+    // is uuid.Nil 00000000-0000-0000-0000-000000000000
+    // or just nil).
+    rpc GetMsgServer( MServerReq ) returns ( MServer ) {}
+}
+
+message MServerReq {
+    string serverID         = 1;
+}
+
+message MServer {
+    string serverID         = 1;
+}

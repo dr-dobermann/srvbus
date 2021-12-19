@@ -14,13 +14,29 @@ The Message Server has a very simple API. To create a new Message Server just ca
 
 if logger isn't presented then error would be returned. If id or name weren't given, they will be created automatically.
 
-If the message server was created with non-empty Event Server reference, then events sends to the  `/mserver/id-of-the-message-server` topic where "id-of-the-message-server" is a message server id. When server created, runned or stopped events `MSERVER_CREATED_EVT`, `MSERVER_STARTED_EVT` and `MSERVER_STOPPED_EVT` were emitted.
+If the message server was created with non-empty Event Server reference, then events sends to the  `/mserver/id-of-the-message-server` topic where "id-of-the-message-server" is a message server id. When server created, runned or stopped events `NEW_MSERVER_EVT`, `MSERVER_START_EVT` and `MSERVER_STOP_EVT` were emitted.
 
 Once the server is created it should be run with `Run` method with appropriate context. Run checks if the server is already runned. If so it's just returns back.
 
 In case the Server is stopped early, all the queues created in the previous session will be deleted before new run.
 
 After the server is created its possible to Put messages into it and Get messages out of it.
+
+### gRPC API of the Message Server
+
+To run the gRPC API of the Message Server, `MsgServer`  object from `pkg/api/ms/grpc` should be created and runs by its `Run` method.
+
+`MsgServer` demands the `MessageServer` pointer and `zap.SugaredLogger` pointer.
+
+As it started the event `MS_GRPC_START_EVT` emitted to the Message Server's topic. At the grpc server end `MS_GRPC_STOP_EVT` emitted.
+
+The gRPC provides three functions:
+
+  - `SendMessages( SendMsgRequest ) returns ( SendMsgResponse )`
+
+  - `GetMessages( MessagesRequest ) returns ( MessagesResponse )`
+
+  - `HasQueue( QueueCheck ) returns ( QueueCheckResponse )`
 
 ## Putting messages to the server
 

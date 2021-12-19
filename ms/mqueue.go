@@ -114,9 +114,9 @@ func (q *mQueue) loop(ctx context.Context) {
 			q.messages = append(q.messages, me)
 			q.Unlock()
 
-			q.mSrv.emitEvent("NEW_MSG_EVT",
+			q.mSrv.EmitEvent("NEW_MSG_EVT",
 				fmt.Sprintf(
-					"{queue: \"%s\", msg_name: \"%s\", msg_sender: \"%v\"",
+					"{queue: \"%s\", msg_name: \"%s\", msg_sender: \"%v\"}",
 					q.Name, me.Name, me.Sender))
 
 			q.log.Debugw("message registered",
@@ -187,8 +187,8 @@ func newQueue(
 	q.log.Debugw("new message queue is created",
 		"queue", name)
 
-	q.mSrv.emitEvent("NEW_QUEUE_EVT",
-		fmt.Sprintf("{queue: \"%s\"", q.Name))
+	q.mSrv.EmitEvent("NEW_QUEUE_EVT",
+		fmt.Sprintf("{queue: \"%s\"}", q.Name))
 
 	return &q, nil
 }

@@ -5,12 +5,15 @@
 // Use of this source is governed by LGPL license that
 // can be found in the LICENSE file.
 //
+
 /*
 Package s2 is a part of the srvbus package. s2 consists of the
 in-memory Service Server implementation.
 
-Service Server is registering, running and monitoring Services
-needed for its users.
+Service Server is registering, running and monitoring external
+and internalServices needed for its users.
+
+It could be used separately from the others srvbus pacackages.
 */
 package s2
 

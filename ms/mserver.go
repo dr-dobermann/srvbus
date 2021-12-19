@@ -47,7 +47,7 @@ type MessageServer struct {
 
 // emits single event into the personal message server topic
 // if the Event Server was given on New call.
-func (mSrv *MessageServer) emitEvent(name, descr string) {
+func (mSrv *MessageServer) EmitEvent(name, descr string) {
 	if mSrv.eSrv == nil {
 		return
 	}
@@ -84,6 +84,11 @@ func (mSrv *MessageServer) emitEvent(name, descr string) {
 			"err", err)
 		return
 	}
+}
+
+// returns ID of the server
+func (mSrv *MessageServer) ID() uuid.UUID {
+	return mSrv.id
 }
 
 // IsRunned returns the current running state of the MessageServer.
@@ -160,8 +165,8 @@ func New(
 
 	log.Debug("message server created")
 
-	ms.emitEvent("MSERVER_CREATED_EVT",
-		fmt.Sprintf("{name: \"%s\", id: \"%s\"", name, id))
+	ms.EmitEvent("NEW_MSERVER_EVT",
+		fmt.Sprintf("{name: \"%s\", id: \"%s\"}", name, id))
 
 	return ms, nil
 }
@@ -183,8 +188,8 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 
 	mSrv.log.Info("server started")
 
-	mSrv.emitEvent("MSERVER_STARTED_EVT",
-		fmt.Sprintf("{name: \"%s\", id: \"%s\"", mSrv.Name, mSrv.id))
+	mSrv.EmitEvent("MSERVER_START_EVT",
+		fmt.Sprintf("{name: \"%s\", id: \"%s\"}", mSrv.Name, mSrv.id))
 
 	go func() {
 		<-ctx.Done()
@@ -197,8 +202,8 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 
 		mSrv.log.Info("server stopped")
 
-		mSrv.emitEvent("MSERVER_STOPPED_EVT",
-			fmt.Sprintf("{name: \"%s\", id: \"%s\"", mSrv.Name, mSrv.id))
+		mSrv.EmitEvent("MSERVER_STOP_EVT",
+			fmt.Sprintf("{name: \"%s\", id: \"%s\"}", mSrv.Name, mSrv.id))
 	}()
 }
 

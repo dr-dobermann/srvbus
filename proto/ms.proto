@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+option go_package = "/ms_proto";
+
+package ms_proto;
+
+/*
+  generator string on ms-windows (run from srvbus root)
+
+  D:\dev-tools\protoc\bin\protoc --go_out=.\proto\gen\ --go-grpc_out=.\proto\gen\ .\proto\ms.proto
+*/
+
+// =============================================================================
+// Message Server api
+service Messenger {
+    // sends a single message or a bunch of them to a server.
+    // if there is no error, the rpc returns the number of messages sent to
+    // the queue
+    rpc SendMessages( SendMsgRequest ) returns ( SendMsgResponse ) {}
+
+    // gets a stream of messages from the server.
+    // returned stream could be empty if there is no messages in the queue
+    // or there is no _new_ messages for the particular receiverID.
+    // if you need to read all messages in the queue, just 
+    // set fromBegin to true.
+    rpc GetMessages( MessagesRequest ) returns ( MessagesResponse ) {}
+
+    // checks if there is particular queue on the MessageServer.
+    rpc HasQueue( QueueCheck ) returns ( QueueCheckResponse ) {}
+}
+
+message SendMsgRequest {
+    string serverID         = 1;
+    string queue            = 2;
+    string senderID         = 3;
+
+    repeated Message msgs   = 4;
+}
+
+message SendMsgResponse {
+    string serverID             = 1;
+    repeated int32 sentMsgPos   = 2;
+    repeated string sentMsgID   = 3;
+}
+
+message MessagesRequest {
+    string serverID         = 1;
+    string receiverID       = 2;
+    string queue            = 3;
+    bool fromBegin          = 4;
+}
+
+message MessagesResponse {
+    string serverID                   = 1;
+    repeated MessageEnvelope messages = 2; 
+}
+
+message MessageEnvelope {
+    string serverID         = 1;
+    string queue            = 2;
+    string msgID            = 3;
+    string at               = 4;
+    string senderID         = 5;
+
+    Message msg             = 6;
+}
+
+message Message {
+    string name             = 4;
+    string data             = 5;
+}
+
+message QueueCheck {
+    string serverID         = 1;
+    string name             = 2;
+}
+
+message QueueCheckResponse {
+    string serverID         = 1;
+    bool state              = 2;
+}

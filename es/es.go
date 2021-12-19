@@ -5,11 +5,14 @@
 // Use of this source is governed by LGPL license that
 // can be found in the LICENSE file.
 //
+
 /*
 Package es is a part of the srvbus package. es consists of the
 in-memory Events Server implementation.
 
 Event Server provides the sub/pub model of the data exchange.
+
+It could be used separately from the others srvbus pacackages.
 */
 package es
 
@@ -23,7 +26,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var errNotImplementedYet = fmt.Errorf("not implemented yet")
+// var errNotImplementedYet = fmt.Errorf("not implemented yet")
 
 // EventServerError is a error wrapper for Event Server and his things.
 type EventServerError struct {
