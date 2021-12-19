@@ -91,6 +91,11 @@ func (mSrv *MessageServer) ID() uuid.UUID {
 	return mSrv.id
 }
 
+// returns event_service topic for the message server
+func (mSrv *MessageServer) ESTopic() string {
+	return mSrv.es_topic
+}
+
 // IsRunned returns the current running state of the MessageServer.
 func (mSrv *MessageServer) IsRunned() bool {
 	mSrv.Lock()

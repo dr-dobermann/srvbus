@@ -27,6 +27,25 @@ type MsgServer struct {
 	runned bool
 }
 
+// creates a new GRPC server for the single Message Server.
+func New(mSrv *ms.MessageServer,
+	log *zap.SugaredLogger) (*MsgServer, error) {
+
+	if mSrv == nil {
+		return nil, fmt.Errorf("no message server given")
+	}
+
+	if log == nil {
+		return nil, fmt.Errorf("no logger given")
+	}
+
+	ms := &MsgServer{
+		log: log.Named("GRPC"),
+		srv: mSrv}
+
+	return ms, nil
+}
+
 // returns server's running status
 func (mSrv *MsgServer) IsRunned() bool {
 	mSrv.Lock()
@@ -75,7 +94,7 @@ func (mSrv *MsgServer) SendMessages(
 	}
 
 	// check request
-	srvID, err := mSrv.checkServerID(strings.Trim(in.GetSenderID(), " "))
+	srvID, err := mSrv.checkServerID(strings.Trim(in.GetServerID(), " "))
 	if err != nil {
 		err = fmt.Errorf("invalid serverID: %v", err)
 
@@ -287,7 +306,9 @@ func (mSrv *MsgServer) checkServerID(id string) (uuid.UUID, error) {
 	}
 
 	if mSrv.srv.ID() != srvID {
-		return uuid.Nil, fmt.Errorf("server ID don't match")
+		return uuid.Nil,
+			fmt.Errorf("server ID don't match. Want: %v, got: %v",
+				mSrv.srv.ID(), srvID)
 	}
 
 	return srvID, nil
@@ -341,7 +362,7 @@ func (mSrv *MsgServer) Run(
 	mSrv.runned = false
 	mSrv.Unlock()
 
-	mSrv.log.Info("server started")
+	mSrv.log.Info("server stopped")
 
 	mSrv.srv.EmitEvent("MS_GRPC_STOP_EVT",
 		fmt.Sprintf(

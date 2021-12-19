@@ -21,6 +21,7 @@ type Event struct {
 	At time.Time
 }
 
+// fmt.Stringer implementation for Event.
 func (e *Event) String() string {
 	return fmt.Sprintf("Evt '%s' @ %v [%s]",
 		e.Name, e.At, string(e.Data()))
@@ -89,6 +90,11 @@ type EventEnvelope struct {
 
 	// event index in the topic storage
 	Index int
+}
+
+// return a copy of enveloped Event
+func (ee *EventEnvelope) What() Event {
+	return *ee.event
 }
 
 // checks obligatory EventEnvelope fields
