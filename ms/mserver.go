@@ -96,6 +96,11 @@ func (mSrv *MessageServer) ESTopic() string {
 	return mSrv.es_topic
 }
 
+// returns current loggers of the Message Server
+func (mSrv *MessageServer) Logger() *zap.SugaredLogger {
+	return mSrv.log
+}
+
 // IsRunned returns the current running state of the MessageServer.
 func (mSrv *MessageServer) IsRunned() bool {
 	mSrv.Lock()

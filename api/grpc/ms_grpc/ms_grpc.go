@@ -36,7 +36,7 @@ func New(mSrv *ms.MessageServer,
 	}
 
 	if log == nil {
-		return nil, fmt.Errorf("no logger given")
+		log = mSrv.Logger()
 	}
 
 	ms := &MsgServer{

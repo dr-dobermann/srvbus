@@ -26,7 +26,7 @@ After the server is created its possible to Put messages into it and Get message
 
 To run the gRPC API of the Message Server, `MsgServer`  object from `pkg/api/ms/grpc` should be created and runs by its `Run` method.
 
-`MsgServer` demands the `MessageServer` pointer and `zap.SugaredLogger` pointer.
+`MsgServer` demands the `MessageServer` pointer and `zap.SugaredLogger` pointer. If `log` parameter is `nil`, the Message Server logger will be used from `Logger` method of `MessageServer`.
 
 As it started the event `MS_GRPC_START_EVT` emitted to the Message Server's topic. At the grpc server end `MS_GRPC_STOP_EVT` emitted.
 
