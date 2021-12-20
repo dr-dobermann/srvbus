@@ -123,37 +123,6 @@ func (q *mQueue) loop(ctx context.Context) {
 				"msgID", me.Name,
 				"key", me.Name)
 
-		case mReq := <-q.mReqCh:
-			q.log.Debugw("got messages request",
-				"receiver", mReq.receiver)
-
-			from := q.lastReaded[mReq.receiver]
-			if mReq.fromBegin {
-				from = 0
-			}
-
-			mes := make([]MessageEnvelope, len(q.messages)-from)
-
-			for i, me := range q.messages[from:] {
-				mes[i] = *me
-			}
-
-			go func() {
-				for _, me := range mes {
-					me := me
-					mReq.messages <- me
-				}
-
-				close(mReq.messages)
-			}()
-
-			q.log.Debugw("message request processing ended",
-				"receiver", mReq.receiver,
-				"messages number", len(mes))
-
-			q.Lock()
-			q.lastReaded[mReq.receiver] = from + len(mes)
-			q.Unlock()
 		}
 	}
 }
@@ -243,12 +212,19 @@ func (q *mQueue) getMessages(
 
 	q.Lock()
 
-	from := 0
-	if !fromBegin {
-		from = q.lastReaded[receiver]
+	from := q.lastReaded[receiver]
+	if fromBegin {
+		from = 0
 	}
 
+	q.log.Debugw("last message number",
+		zap.String("receiver", receiver.String()),
+		zap.Int("from", from),
+		zap.Bool("fromBegin", fromBegin))
+
 	res := append([]*MessageEnvelope{}, q.messages[from:]...)
+
+	q.lastReaded[receiver] = from + len(res)
 
 	q.Unlock()
 

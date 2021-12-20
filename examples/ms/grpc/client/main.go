@@ -13,9 +13,10 @@ import (
 )
 
 var (
-	host  = flag.String("host", "localhost", "grpc host")
-	port  = flag.Int("port", 50051, "grpc port")
-	srvID = flag.String("srv_id", "", "message server ID")
+	host     = flag.String("host", "localhost", "grpc host")
+	port     = flag.Int("port", 50051, "grpc port")
+	srvID    = flag.String("srv_id", "", "message server ID")
+	msgDelay = flag.Int("delay", 0, "delay between message sending in seconds")
 )
 
 func main() {
@@ -66,5 +67,7 @@ func main() {
 		log.Info("message", i, "sucessfully sent as #", r.GetSentMsgID()[0])
 
 		cancel()
+
+		time.Sleep(time.Duration(*msgDelay) * time.Second)
 	}
 }

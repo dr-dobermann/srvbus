@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -14,8 +15,23 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	run_debug = flag.Bool("debug", false,
+		"run in debug mode (extensive logging)")
+)
+
 func main() {
-	log, err := zap.NewProduction()
+	flag.Parse()
+
+	var (
+		log *zap.Logger
+		err error
+	)
+	if *run_debug {
+		log, err = zap.NewDevelopment()
+	} else {
+		log, err = zap.NewProduction()
+	}
 	if err != nil {
 		panic("couldn't create log")
 	}
