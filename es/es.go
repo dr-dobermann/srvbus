@@ -475,7 +475,6 @@ func (eSrv *EventServer) UnSubscribe(
 
 			return newESErr(eSrv, err, "couldn't add topic creation event")
 		}
-
 	}
 
 	return nil

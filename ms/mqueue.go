@@ -31,14 +31,6 @@ type msgRegRequest struct {
 	msg    *Message
 }
 
-// queueMessagesRequest consist a single request for return
-// messages to the receiver.
-type queueMessagesRequest struct {
-	receiver  uuid.UUID
-	fromBegin bool
-	messages  chan MessageEnvelope
-}
-
 // Message Queue
 type mQueue struct {
 	sync.Mutex
@@ -56,9 +48,6 @@ type mQueue struct {
 
 	// messages registration channel
 	regCh chan msgRegRequest
-
-	// messages return channel
-	mReqCh chan queueMessagesRequest
 
 	runned bool
 }
@@ -135,7 +124,7 @@ func (q *mQueue) loop(ctx context.Context) {
 func newQueue(
 	ctx context.Context,
 	name string,
-	mSrv *MessageServer) (*mQueue, error) {
+	mSrv *MessageServer) *mQueue {
 
 	q := mQueue{
 		Name:       name,
@@ -143,8 +132,7 @@ func newQueue(
 		lastReaded: make(map[uuid.UUID]int),
 		mSrv:       mSrv,
 		log:        mSrv.log.Named(name),
-		regCh:      make(chan msgRegRequest),
-		mReqCh:     make(chan queueMessagesRequest)}
+		regCh:      make(chan msgRegRequest)}
 
 	// start processing loop
 	q.Lock()
@@ -159,7 +147,7 @@ func newQueue(
 	q.mSrv.EmitEvent("NEW_QUEUE_EVT",
 		fmt.Sprintf("{queue: \"%s\"}", q.Name))
 
-	return &q, nil
+	return &q
 }
 
 // putMessages puts messages into the queue q.

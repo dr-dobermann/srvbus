@@ -122,12 +122,6 @@ func (sSrv *ServiceServer) IsRunned() bool {
 	return sSrv.runned
 }
 
-// svcRes consists of results of execution one single Service.
-type svcRes struct {
-	id  uuid.UUID
-	err error
-}
-
 // emits single event into the personal message server topic
 // if the Event Server was given on New call.
 func (sSrv *ServiceServer) emitEvent(name, descr string) {
@@ -577,7 +571,7 @@ func (sSrv *ServiceServer) waitForSvc(
 }
 
 // S2Stat consists the Service Server status returned by Stat mehtod.
-type S2Stat struct {
+type Stat struct {
 	Name     string
 	ID       uuid.UUID
 	Active   bool
@@ -587,7 +581,7 @@ type S2Stat struct {
 
 // String implements the fmt.Stringer interface and
 // returns the string representation of the S2Stat
-func (stat S2Stat) String() string {
+func (stat Stat) String() string {
 	res := "\nService Server\n" +
 		"======================================\n" +
 		"Name          : " + stat.Name + "\n" +
@@ -621,8 +615,8 @@ type Info struct {
 }
 
 // Stat returns s2 server statistics.
-func (sSrv *ServiceServer) Stat() S2Stat {
-	stat := new(S2Stat)
+func (sSrv *ServiceServer) Stat() Stat {
+	stat := new(Stat)
 	stat.Splits = make(map[string]Info)
 
 	sSrv.Lock()

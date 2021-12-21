@@ -5,17 +5,17 @@ option go_package = "/sb_proto";
 package srvbus_proto;
 
 service SrvBus {
-    // checks if there is a MessageServer with given ID
-    // or asking for available MessageServer (if id in request 
+    // checks if given server is present of service bus or 
+    // asks for available MessageServer (if id in request 
     // is uuid.Nil 00000000-0000-0000-0000-000000000000
     // or just nil).
-    rpc GetMsgServer( MServerReq ) returns ( MServer ) {}
+    // 
+    // if returned nil uuid, then there is no particular message server
+    // or there is no runned message server on the bus
+    rpc GetMsgServer( Server ) returns ( Server ) {}
 }
 
-message MServerReq {
-    string serverID         = 1;
+message Server {
+    string server_id        = 1;
 }
 
-message MServer {
-    string serverID         = 1;
-}

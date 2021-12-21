@@ -41,11 +41,11 @@ func TestSubscriptions(t *testing.T) {
 		sr     SubscrReq
 	}{
 		"no_subscriber": {uuid.Nil,
-			SubscrReq{"/main", subCh, ONLY_ONE_TOPIC, 0, 0, ALL_EVENTS}},
+			SubscrReq{"/main", subCh, OnlyOneTopic, 0, 0, AllEvents}},
 		"no_topic": {subscriber,
-			SubscrReq{"/mani", subCh, ONLY_ONE_TOPIC, 0, 0, ALL_EVENTS}},
+			SubscrReq{"/mani", subCh, OnlyOneTopic, 0, 0, AllEvents}},
 		"no_channel": {subscriber,
-			SubscrReq{"/main", nil, ONLY_ONE_TOPIC, 0, 0, ALL_EVENTS}}}
+			SubscrReq{"/main", nil, OnlyOneTopic, 0, 0, AllEvents}}}
 	for tn, s := range err_subs {
 		t.Run(tn, func(t *testing.T) {
 			is.True(eSrv.Subscribe(s.subscr, s.sr) != nil)
@@ -54,9 +54,9 @@ func TestSubscriptions(t *testing.T) {
 
 	// add subscriptions
 	subs := []SubscrReq{
-		{mnt, subCh, RECURSIVE, 1, FROM_BEGIN, ALL_EVENTS},
+		{mnt, subCh, Recursive, 1, FromBegin, AllEvents},
 		{sst,
-			subCh, ONLY_ONE_TOPIC, 0, ONLY_NEW_EVENTS,
+			subCh, OnlyOneTopic, 0, OnlyNewEvents,
 			[]Filter{WithSubName("GREETING")}},
 	}
 	is.NoErr(eSrv.Subscribe(subscriber, subs...))

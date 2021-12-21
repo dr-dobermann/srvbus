@@ -24,14 +24,14 @@ func (f filterFunc) check(ee EventEnvelope) bool {
 }
 
 const (
-	FROM_BEGIN      int = 0
-	ONLY_NEW_EVENTS int = -1
+	FromBegin      int = 0
+	OnlyNewEvents int = -1
 
-	RECURSIVE      bool = true
-	ONLY_ONE_TOPIC bool = false
+	Recursive      bool = true
+	OnlyOneTopic bool = false
 )
 
-var ALL_EVENTS []Filter = []Filter{}
+var AllEvents []Filter
 
 // SubscrReq consists of
 type SubscrReq struct {

@@ -117,8 +117,8 @@ func TestTopicsManagement(t *testing.T) {
 	is.True(eSrv.HasTopic(tn))
 	is.True(eSrv.HasTopic("/main/" + tn1))
 
-	is.NoErr(eSrv.RemoveTopic("/main/st/sst", RECURSIVE))
+	is.NoErr(eSrv.RemoveTopic("/main/st/sst", Recursive))
 	is.True(!eSrv.HasTopic("/main/st/sst"))
 
-	is.True(eSrv.RemoveTopic("/main", ONLY_ONE_TOPIC) != nil)
+	is.True(eSrv.RemoveTopic("/main", OnlyOneTopic) != nil)
 }

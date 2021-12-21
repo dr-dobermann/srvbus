@@ -30,37 +30,37 @@ service Messenger {
 }
 
 message SendMsgRequest {
-    string serverID         = 1;
+    string server_id         = 1;
     string queue            = 2;
-    string senderID         = 3;
+    string sender_id        = 3;
 
     repeated Message msgs   = 4;
 }
 
 message SendMsgResponse {
-    string serverID             = 1;
-    repeated int32 sentMsgPos   = 2;
-    repeated string sentMsgID   = 3;
+    string server_id              = 1;
+    repeated int32 sent_msg_pos   = 2;
+    repeated string sent_msg_id   = 3;
 }
 
 message MessagesRequest {
-    string serverID         = 1;
-    string receiverID       = 2;
+    string server_id        = 1;
+    string receiver_id      = 2;
     string queue            = 3;
-    bool fromBegin          = 4;
+    bool from_begin         = 4;
 }
 
 message MessagesResponse {
-    string serverID                   = 1;
+    string server_id                  = 1;
     repeated MessageEnvelope messages = 2; 
 }
 
 message MessageEnvelope {
-    string serverID         = 1;
+    string server_id        = 1;
     string queue            = 2;
-    string msgID            = 3;
+    string msg_id           = 3;
     string at               = 4;
-    string senderID         = 5;
+    string sender_id        = 5;
 
     Message msg             = 6;
 }
@@ -71,11 +71,11 @@ message Message {
 }
 
 message QueueCheck {
-    string serverID         = 1;
+    string server_id        = 1;
     string name             = 2;
 }
 
 message QueueCheckResponse {
-    string serverID         = 1;
+    string server_id        = 1;
     bool state              = 2;
 }

@@ -1,0 +1,167 @@
+/*
+protoc --go_out=.\proto\gen --go-grpc_out=.\proto\gen .\proto\es.proto
+*/
+
+syntax = "proto3";
+
+package es_proto;
+
+option go_package="/es_proto";
+
+service EventService {
+    // checks if the topic exists on host server.
+    rpc HasTopic(TopicRequest) returns (OpResponse) {}
+
+    // adds a new topic or a whole topics branch to the host server.
+    rpc AddTopics(AddTopicReq) returns (OpResponse) {}
+
+    // Returns topic or branch from the host server
+    rpc DelTopics(DelTopicReq) returns (OpResponse) {}
+
+    // adds a new event on the host server.
+    rpc AddEvent(EventRegistration) returns (OpResponse) {}
+
+    // creates single or multi- subscription on the host server. 
+    rpc Subscribe(SubscriptionRequest) returns (stream EventEnvelope) {}
+
+    // cancels subsciptions for one or many topics on the host server.
+    rpc UnSubscribe(UnsubsibeRequest) returns (OpResponse) {}
+}
+
+message TopicRequest {
+    // host server id
+    string server_id                = 1;
+
+    // should be used absolute topic's path
+    // i.e. /main/topic/subtopic
+    string topic                   = 2;
+}
+
+message OpResponse {
+    // if operation is failed, then id.Nil will be returned, if
+    // everything is fine, then server_id is returned.
+    string server_id                = 1;
+
+    enum Result {
+        FAILED      = 0;
+        OK          = 1;
+    }
+
+    Result result                   = 2;
+}
+
+message AddTopicReq {
+    // host server id
+    string server_id                = 1;
+
+    // topic or branch to add
+    string topic                    = 2;
+
+    // base topic to add into. Base topic should be on the host server
+    // or RPC failed.
+    string from_topic               = 3;
+}
+
+message DelTopicReq {
+    // host server id
+    string server_id                = 1;
+
+    // topic to remove.
+    string topic                    = 2;
+
+    // if recursive is true, the whole branch started from topic and all
+    // its subtopics.
+    // if topic has subtopcs and recursive is false, error will be returned.
+    bool   recursive                = 3;
+}
+
+message EventRegistration {
+    // host server id
+    string server_id                = 1;
+
+    // topic to insert the event into.
+    string topic                    = 2;
+    
+    // event's sender id.
+    string sender_id                = 3;
+
+    // event's name, details and timestamp.                      
+    Event event                     = 4;
+}
+
+message Event {
+    // event name
+    string evt_name                 = 1;
+    
+    // event details
+    string evt_details              = 2;
+
+    // event time
+    int64 timestamp                 = 3;
+}
+
+message SubscriptionRequest {
+    // host server id
+    string server_id                        = 1;
+
+    // subscriber id
+    string subscriber_id                    = 2;
+
+    // subscription list
+    repeated Subscription subscriptions     = 3;
+}
+
+message Subscription {
+    // topic in absolute path format
+    string topic                    = 1;
+
+    // make recursive subscription
+    bool   recursive                = 2;
+
+    // recursion depth
+    int32  depth                    = 3;
+
+    // start number of events in topic
+    int32  start_pos                = 4;
+
+    // filters for subscription
+    repeated Filter filters         = 5;
+}
+
+message Filter {
+    string value                    = 1;
+    enum FilterType {
+        HAS_NAME    = 0;  // exact event name equality
+        IN_NAME     = 1;  // event name has a given substring
+        IN_DESCR    = 2;  // event description has a given substriction
+    }
+    FilterType type                 = 2; 
+}
+
+message EventEnvelope {
+    // host server id
+    string server_id                = 1;
+
+    // topic of event registration
+    string topic                    = 2;
+    
+    // event's sender id
+    string sender_id                = 3;
+    
+    // event registration time
+    string reg_at                   = 5;
+ 
+    // event name, details and timestamp
+    Event Event                     = 6;
+}
+
+message UnsubsibeRequest {
+    // host server id
+    string server_id                = 1;
+ 
+    // subscriber id
+    string subscriber_id            = 2;
+
+    // topics to unsubscribe from
+    repeated string topics          = 3;
+}

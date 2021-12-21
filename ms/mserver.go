@@ -41,8 +41,8 @@ type MessageServer struct {
 
 	runned bool
 
-	eSrv     *es.EventServer
-	es_topic string
+	eSrv    *es.EventServer
+	esTopic string
 }
 
 // emits single event into the personal message server topic
@@ -53,7 +53,7 @@ func (mSrv *MessageServer) EmitEvent(name, descr string) {
 	}
 
 	// initialize default server topic if needed
-	if mSrv.es_topic == "" {
+	if mSrv.esTopic == "" {
 		topic := "/mserver/" + mSrv.id.String()
 		if err := mSrv.eSrv.AddTopicQueue(topic, "/"); err != nil {
 			mSrv.log.Warnw("couldn't add topic to Event Server",
@@ -63,7 +63,7 @@ func (mSrv *MessageServer) EmitEvent(name, descr string) {
 				"err", err)
 			return
 		}
-		mSrv.es_topic = topic
+		mSrv.esTopic = topic
 	}
 
 	evt, err := es.NewEventWithString(name, descr)
@@ -76,7 +76,7 @@ func (mSrv *MessageServer) EmitEvent(name, descr string) {
 		return
 	}
 
-	if err := mSrv.eSrv.AddEvent(mSrv.es_topic, evt, mSrv.id); err != nil {
+	if err := mSrv.eSrv.AddEvent(mSrv.esTopic, evt, mSrv.id); err != nil {
 		mSrv.log.Warnw("couldn't register an event",
 			"eSrvName", mSrv.eSrv.Name,
 			"eSrvID", mSrv.eSrv.ID,
@@ -93,7 +93,7 @@ func (mSrv *MessageServer) ID() uuid.UUID {
 
 // returns event_service topic for the message server
 func (mSrv *MessageServer) ESTopic() string {
-	return mSrv.es_topic
+	return mSrv.esTopic
 }
 
 // returns current loggers of the Message Server
@@ -254,14 +254,7 @@ func (mSrv *MessageServer) PutMessages(
 
 	q, ok := mSrv.queues[queue]
 	if !ok {
-		nq, err := newQueue(mSrv.ctx, queue, mSrv)
-		if err != nil {
-			mSrv.log.Errorw("couldn't put messages",
-				"queue", queue,
-				"err", err.Error())
-
-			return fmt.Errorf("put messages failed : %w", err)
-		}
+		nq := newQueue(mSrv.ctx, queue, mSrv)
 
 		mSrv.queues[queue] = nq
 
