@@ -3,6 +3,7 @@ package es_grpc
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/dr-dobermann/srvbus/es"
@@ -19,6 +20,8 @@ type EvtServer struct {
 	srv *es.EventServer
 	log *zap.SugaredLogger
 
+	ctx context.Context
+
 	runned bool
 }
 
@@ -33,6 +36,25 @@ func (eSrv *EvtServer) IsRunned() bool {
 func (eSrv *EvtServer) HasTopic(
 	ctx context.Context,
 	in *pb.TopicRequest) (*pb.OpResponse, error) {
+
+	var err error
+
+	// log results of the function call
+	defer func() {
+		if err != nil {
+			eSrv.log.Warnw("checking topic failed",
+				zap.Error(err))
+
+			return
+		}
+
+		eSrv.log.Debug("topic checking succes",
+			zap.String("topic", in.GetTopic()))
+	}()
+
+	if !eSrv.IsRunned() {
+		return nil, fmt.Errorf("server isn't runned")
+	}
 
 	srvID, err := eSrv.checkServerID(in.GetServerId())
 	if err != nil {
@@ -57,6 +79,28 @@ func (eSrv *EvtServer) HasTopic(
 func (eSrv *EvtServer) AddTopics(
 	ctx context.Context,
 	in *pb.AddTopicReq) (*pb.OpResponse, error) {
+
+	var err error
+
+	// log results of the function call
+	defer func() {
+		if err != nil {
+			eSrv.log.Warnw("topic adding failed",
+				zap.String("topic", in.GetTopic()),
+				zap.String("add_from", in.GetFromTopic()),
+				zap.Error(err))
+
+			return
+		}
+
+		eSrv.log.Debug("topic added succesfully",
+			zap.String("topic", in.GetTopic()),
+			zap.String("add_from", in.GetFromTopic()))
+	}()
+
+	if !eSrv.IsRunned() {
+		return nil, fmt.Errorf("server isn't runned")
+	}
 
 	srvID, err := eSrv.checkServerID(in.GetServerId())
 	if err != nil {
@@ -97,15 +141,36 @@ func (eSrv *EvtServer) DelTopics(
 	ctx context.Context,
 	in *pb.DelTopicReq) (*pb.OpResponse, error) {
 
+	var err error
+
+	// log results of the function call
+	defer func() {
+		if err != nil {
+			eSrv.log.Warnw("topic deleting failed",
+				zap.String("topic", in.GetTopic()),
+				zap.Error(err))
+
+			return
+		}
+
+		eSrv.log.Debug("topic added succesfully",
+			zap.String("topic", in.GetTopic()))
+	}()
+
+	if !eSrv.IsRunned() {
+		return nil, fmt.Errorf("server isn't runned")
+	}
+
 	srvID, err := eSrv.checkServerID(in.GetServerId())
 	if err != nil {
 		return nil, fmt.Errorf("invalid server ID: %v", err)
 	}
 
-	if err = eSrv.srv.RemoveTopic(
+	err = eSrv.srv.RemoveTopic(
 		in.GetTopic(),
-		in.GetRecursive()); err != nil {
+		in.GetRecursive())
 
+	if err != nil {
 		return nil,
 			fmt.Errorf("couldn't remove topic %s recursevely (%t): %v",
 				in.GetTopic(), in.GetRecursive(), err)
@@ -117,9 +182,176 @@ func (eSrv *EvtServer) DelTopics(
 		nil
 }
 
-// // adds a new event on the host server.
-// AddEvent(context.Context, *EventRegistration) (*OpResponse, error)
-// // creates single or multi- subscription on the host server.
-// Subscribe(*SubscriptionRequest, EventService_SubscribeServer) error
+// adds a new event on the host server.
+func (eSrv *EvtServer) AddEvent(
+	ctx context.Context,
+	in *pb.EventRegistration) (*pb.OpResponse, error) {
+
+	var err error
+
+	// log results of the function call
+	defer func() {
+		if err != nil {
+			eSrv.log.Warnw("event adding failed",
+				zap.String("topic", in.GetTopic()),
+				zap.String("name", in.GetEvent().EvtName),
+				zap.String("sender", in.GetSenderId()),
+				zap.Error(err))
+
+			return
+		}
+
+		eSrv.log.Debug("event added succesfully",
+			zap.String("topic", in.GetTopic()),
+			zap.String("name", in.GetEvent().EvtName),
+			zap.String("sender", in.GetSenderId()))
+	}()
+
+	if !eSrv.IsRunned() {
+		return nil, fmt.Errorf("server isn't runned")
+	}
+
+	srvID, err := eSrv.checkServerID(in.GetServerId())
+	if err != nil {
+		return nil, fmt.Errorf("invalid server ID: %v", err)
+	}
+
+	senderID, err := uuid.Parse(strings.Trim(in.GetSenderId(), " "))
+	if err != nil {
+		return nil, fmt.Errorf("invalid sender ID: %v", err)
+	}
+
+	evt, err := es.NewEventWithString(
+		in.GetEvent().GetEvtName(),
+		in.GetEvent().GetEvtDetails())
+	if err != nil {
+		return nil, fmt.Errorf("couldn't create event: %v", err)
+	}
+
+	err = eSrv.srv.AddEvent(in.GetTopic(), evt, senderID)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't add event: %v", err)
+	}
+
+	return &pb.OpResponse{
+			ServerId: srvID.String(),
+			Result:   pb.OpResponse_OK},
+		nil
+}
+
+// creates single or multi- subscription on the host server.
+func (eSrv *EvtServer) Subscribe(
+	in *pb.SubscriptionRequest,
+	stream pb.EventService_SubscribeServer) error {
+
+	var (
+		err       error
+		subsCount int
+	)
+
+	// log results of the function call
+	defer func() {
+		if err != nil {
+			eSrv.log.Warnw("subscription failed",
+				zap.String("topic", in.GetSubscriberId()),
+				zap.Error(err))
+
+			return
+		}
+
+		eSrv.log.Debug("subscription is succesfull",
+			zap.String("topic", in.GetSubscriberId()))
+	}()
+
+	if !eSrv.IsRunned() {
+		return fmt.Errorf("server isn't runned")
+	}
+
+	srvID, err := eSrv.checkServerID(in.GetServerId())
+	if err != nil {
+		return fmt.Errorf("invalid server ID: %v", err)
+	}
+
+	subscriberID, err := uuid.Parse(strings.Trim(in.GetSubscriberId(), " "))
+	if err != nil {
+		return fmt.Errorf("invalid sender ID: %v", err)
+	}
+
+	evtChan := make(chan es.EventEnvelope)
+
+	for i, s := range in.GetSubscriptions() {
+		var filters []es.Filter
+
+		for _, f := range s.GetFilters() {
+			switch f.GetType() {
+			case pb.Filter_HAS_NAME:
+				filters = append(filters, es.WithName(f.GetValue()))
+
+			case pb.Filter_IN_NAME:
+				filters = append(filters, es.WithSubName(f.GetValue()))
+
+			case pb.Filter_IN_DESCR:
+				filters = append(filters, es.WithSubstr(f.GetValue()))
+			}
+		}
+
+		sr := es.SubscrReq{
+			Topic:     s.GetTopic(),
+			SubCh:     evtChan,
+			Recursive: s.GetRecursive(),
+			Depth:     uint(s.GetDepth()),
+			StartPos:  int(s.GetStartPos()),
+			Filters:   filters,
+		}
+
+		subsCount++
+
+		err = eSrv.srv.Subscribe(subscriberID, sr)
+
+		if err != nil {
+			eSrv.log.Warnw("subscritpion error",
+				zap.Int("number", i),
+				zap.String("topic", sr.Topic),
+				zap.String("subscriber_id", subscriberID.String()),
+				zap.Error(err))
+
+			continue
+		}
+
+		eSrv.log.Debugw("new subscritpion",
+			zap.Int("number", i),
+			zap.String("topic", sr.Topic),
+			zap.String("subscriber_id", subscriberID.String()))
+	}
+
+	eSrv.log.Debugw("subscritpions added",
+		zap.Int("total", subsCount),
+		zap.String("subscriber_id", subscriberID.String()))
+
+	for ee := range evtChan {
+		di := ee.What().DataItem
+
+		env := pb.EventEnvelope{
+			ServerId: srvID.String(),
+			Topic:    ee.Topic,
+			SenderId: ee.Publisher.String(),
+			RegAt:    ee.RegAt.String(),
+			Event: &pb.Event{
+				EvtName:    ee.What().Name,
+				EvtDetails: string(di.Data()),
+				Timestamp:  ee.What().At.Unix(),
+			},
+		}
+
+		if err := stream.Send(&env); err != nil {
+			return fmt.Errorf(
+				"couldn't stream event '%s' in topic '%s' from '%s': %v",
+				env.Event.EvtName, env.Topic, env.SenderId, err)
+		}
+	}
+
+	return nil
+}
+
 // // cancels subsciptions for one or many topics on the host server.
 // UnSubscribe(context.Context, *UnsubsibeRequest) (*OpResponse, error)

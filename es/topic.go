@@ -327,7 +327,7 @@ func (t *Topic) updateSubs(ctx context.Context, ee *EventEnvelope, pos int) {
 //
 //   'DO NOT CALL IT DIRECTLY WITH INVALID REQUEST !!!
 //
-func (t *Topic) subscribe(subscriber uuid.UUID, sr *SubscrReq) error {
+func (t *Topic) subscribe(subscriber uuid.UUID, sr SubscrReq) error {
 	if !t.isRunned() {
 		return newESErr(t.eServer, nil, "cannot subscribe on stopped topic")
 	}

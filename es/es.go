@@ -423,7 +423,7 @@ func (eSrv *EventServer) Subscribe(
 				"couldn't subscribe to non-existed topic '%s'", s.Topic)
 		}
 
-		if err := t.subscribe(subscriber, &s); err != nil {
+		if err := t.subscribe(subscriber, s); err != nil {
 			return newESErr(eSrv, err, "subscription #%d failed", i)
 		}
 
