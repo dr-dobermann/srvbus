@@ -133,7 +133,7 @@ message Filter {
     enum FilterType {
         HAS_NAME    = 0;  // exact event name equality
         IN_NAME     = 1;  // event name has a given substring
-        IN_DESCR    = 2;  // event description has a given substriction
+        IN_DESCR    = 2;  // event description has a given substring
     }
     FilterType type                 = 2; 
 }

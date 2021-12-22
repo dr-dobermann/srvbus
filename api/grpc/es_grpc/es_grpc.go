@@ -490,5 +490,4 @@ func (eSrv *EvtServer) UnSubscribe(
 			Result:   pb.OpResponse_OK,
 		},
 		nil
-
 }

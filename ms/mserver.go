@@ -52,6 +52,12 @@ func (mSrv *MessageServer) EmitEvent(name, descr string) {
 		return
 	}
 
+	if descr == "" {
+		descr = fmt.Sprintf(
+			"{name: \"%s\", id: \"%s\"}",
+			mSrv.Name, mSrv.id)
+	}
+
 	// initialize default server topic if needed
 	if mSrv.esTopic == "" {
 		topic := "/mserver/" + mSrv.id.String()
@@ -175,8 +181,7 @@ func New(
 
 	log.Debug("message server created")
 
-	ms.EmitEvent("NEW_MSERVER_EVT",
-		fmt.Sprintf("{name: \"%s\", id: \"%s\"}", name, id))
+	ms.EmitEvent("NEW_MSERVER_EVT", "")
 
 	return ms, nil
 }
@@ -198,8 +203,7 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 
 	mSrv.log.Info("server started")
 
-	mSrv.EmitEvent("MSERVER_START_EVT",
-		fmt.Sprintf("{name: \"%s\", id: \"%s\"}", mSrv.Name, mSrv.id))
+	mSrv.EmitEvent("MSERVER_START_EVT", "")
 
 	go func() {
 		<-ctx.Done()
@@ -212,8 +216,7 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 
 		mSrv.log.Info("server stopped")
 
-		mSrv.EmitEvent("MSERVER_STOP_EVT",
-			fmt.Sprintf("{name: \"%s\", id: \"%s\"}", mSrv.Name, mSrv.id))
+		mSrv.EmitEvent("MSERVER_STOP_EVT", "")
 	}()
 }
 
