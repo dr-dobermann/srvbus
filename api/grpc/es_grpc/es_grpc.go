@@ -3,13 +3,16 @@ package es_grpc
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dr-dobermann/srvbus/es"
 	pb "github.com/dr-dobermann/srvbus/proto/gen/es_proto"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
 
 type EvtServer struct {
@@ -25,6 +28,74 @@ type EvtServer struct {
 	runned bool
 }
 
+func New(eSrv *es.EventServer, log *zap.SugaredLogger) (*EvtServer, error) {
+	if eSrv == nil {
+		return nil, fmt.Errorf("host server isn't set")
+	}
+
+	if log == nil {
+		log = eSrv.Logger()
+	}
+
+	return &EvtServer{
+			srv: eSrv,
+			log: log},
+		nil
+}
+
+func (eSrv *EvtServer) Run(
+	ctx context.Context,
+	host, port string,
+	opts ...grpc.ServerOption) error {
+
+	if eSrv.IsRunned() {
+		return fmt.Errorf("already runned")
+	}
+
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%s", host, port))
+	if err != nil {
+		return fmt.Errorf("couldn't start tcp listener: %v", err)
+	}
+
+	grpcServer := grpc.NewServer(opts...)
+	pb.RegisterEventServiceServer(grpcServer, eSrv)
+
+	eSrv.Lock()
+	eSrv.runned = true
+	eSrv.Unlock()
+
+	eSrv.log.Infow("server started",
+		zap.String("host", host),
+		zap.String("post", port))
+
+	// start delayed context cancel listener to stop
+	// grpc server once context cancelled
+	time.AfterFunc(time.Second, func() {
+		eSrv.log.Debug("server context stopper started...")
+
+		<-ctx.Done()
+
+		eSrv.log.Debug("context cancelled")
+
+		grpcServer.Stop()
+	})
+
+	// run grpc server
+	err = grpcServer.Serve(l)
+	if err != nil {
+		eSrv.log.Warn("grpc Server ended with error: ", err)
+	}
+
+	eSrv.Lock()
+	eSrv.runned = false
+	eSrv.Unlock()
+
+	eSrv.log.Info("server stopped")
+
+	return err
+}
+
+// checks if the grpc server is runned
 func (eSrv *EvtServer) IsRunned() bool {
 	eSrv.Lock()
 	defer eSrv.Unlock()
@@ -58,7 +129,7 @@ func (eSrv *EvtServer) HasTopic(
 
 	srvID, err := eSrv.checkServerID(in.GetServerId())
 	if err != nil {
-		return nil, fmt.Errorf("invalid host server id:", err)
+		return nil, fmt.Errorf("invalid host server id: %v", err)
 	}
 
 	res := pb.OpResponse{}
@@ -104,7 +175,7 @@ func (eSrv *EvtServer) AddTopics(
 
 	srvID, err := eSrv.checkServerID(in.GetServerId())
 	if err != nil {
-		return nil, fmt.Errorf("invalid host server id:", err)
+		return nil, fmt.Errorf("invalid host server id: %v", err)
 	}
 
 	err = eSrv.srv.AddTopic(in.GetTopic(), in.GetFromTopic())
@@ -244,10 +315,7 @@ func (eSrv *EvtServer) Subscribe(
 	in *pb.SubscriptionRequest,
 	stream pb.EventService_SubscribeServer) error {
 
-	var (
-		err       error
-		subsCount int
-	)
+	var err error
 
 	// log results of the function call
 	defer func() {
@@ -277,7 +345,55 @@ func (eSrv *EvtServer) Subscribe(
 		return fmt.Errorf("invalid sender ID: %v", err)
 	}
 
+	// register subscriptions on the host server
 	evtChan := make(chan es.EventEnvelope)
+	eSrv.subscribe(in, evtChan, subscriberID)
+
+	// start sending events stream from subscriptions
+	return eSrv.sendEvents(eSrv.ctx, evtChan, srvID, stream)
+}
+
+// sends channelled events.
+func (*EvtServer) sendEvents(
+	ctx context.Context,
+	evtChan chan es.EventEnvelope,
+	srvID uuid.UUID,
+	stream pb.EventService_SubscribeServer) error {
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case ee := <-evtChan:
+			di := ee.What().DataItem
+
+			env := pb.EventEnvelope{
+				ServerId: srvID.String(),
+				Topic:    ee.Topic,
+				SenderId: ee.Publisher.String(),
+				RegAt:    ee.RegAt.String(),
+				Event: &pb.Event{
+					EvtName:    ee.What().Name,
+					EvtDetails: string(di.Data()),
+					Timestamp:  ee.What().At.Unix()}}
+
+			if err := stream.Send(&env); err != nil {
+				return fmt.Errorf(
+					"couldn't stream event '%s' in topic '%s' from '%s': %v",
+					env.Event.EvtName, env.Topic, env.SenderId, err)
+			}
+		}
+	}
+}
+
+// registers subscription on the host server.
+func (eSrv *EvtServer) subscribe(
+	in *pb.SubscriptionRequest,
+	evtChan chan es.EventEnvelope,
+	subscriberID uuid.UUID) {
+
+	subsCount := 0
 
 	for i, s := range in.GetSubscriptions() {
 		var filters []es.Filter
@@ -306,7 +422,7 @@ func (eSrv *EvtServer) Subscribe(
 
 		subsCount++
 
-		err = eSrv.srv.Subscribe(subscriberID, sr)
+		err := eSrv.srv.Subscribe(subscriberID, sr)
 
 		if err != nil {
 			eSrv.log.Warnw("subscritpion error",
@@ -327,31 +443,52 @@ func (eSrv *EvtServer) Subscribe(
 	eSrv.log.Debugw("subscritpions added",
 		zap.Int("total", subsCount),
 		zap.String("subscriber_id", subscriberID.String()))
-
-	for ee := range evtChan {
-		di := ee.What().DataItem
-
-		env := pb.EventEnvelope{
-			ServerId: srvID.String(),
-			Topic:    ee.Topic,
-			SenderId: ee.Publisher.String(),
-			RegAt:    ee.RegAt.String(),
-			Event: &pb.Event{
-				EvtName:    ee.What().Name,
-				EvtDetails: string(di.Data()),
-				Timestamp:  ee.What().At.Unix(),
-			},
-		}
-
-		if err := stream.Send(&env); err != nil {
-			return fmt.Errorf(
-				"couldn't stream event '%s' in topic '%s' from '%s': %v",
-				env.Event.EvtName, env.Topic, env.SenderId, err)
-		}
-	}
-
-	return nil
 }
 
-// // cancels subsciptions for one or many topics on the host server.
-// UnSubscribe(context.Context, *UnsubsibeRequest) (*OpResponse, error)
+// cancels subsciptions for one or many topics on the host server.
+func (eSrv *EvtServer) UnSubscribe(
+	ctx context.Context,
+	in *pb.UnsubsibeRequest) (*pb.OpResponse, error) {
+
+	var err error
+
+	// log results of the function call
+	defer func() {
+		if err != nil {
+			eSrv.log.Warnw("unsubscription failed",
+				zap.String("topic", in.GetSubscriberId()),
+				zap.Error(err))
+
+			return
+		}
+
+		eSrv.log.Debug("unsubscription is succesfull",
+			zap.Strings("topic", in.GetTopics()))
+	}()
+
+	if !eSrv.IsRunned() {
+		return nil, fmt.Errorf("server isn't runned")
+	}
+
+	srvID, err := eSrv.checkServerID(in.GetServerId())
+	if err != nil {
+		return nil, fmt.Errorf("invalid server ID: %v", err)
+	}
+
+	subscriberID, err := uuid.Parse(strings.Trim(in.GetSubscriberId(), " "))
+	if err != nil {
+		return nil, fmt.Errorf("invalid sender ID: %v", err)
+	}
+
+	err = eSrv.srv.UnSubscribe(subscriberID, in.GetTopics()...)
+	if err != nil {
+		return nil, fmt.Errorf("unsubscription error: %v", err)
+	}
+
+	return &pb.OpResponse{
+			ServerId: srvID.String(),
+			Result:   pb.OpResponse_OK,
+		},
+		nil
+
+}

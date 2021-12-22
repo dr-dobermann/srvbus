@@ -357,6 +357,9 @@ func (mSrv *MsgServer) Run(
 
 	// run grpc server
 	err = grpcServer.Serve(l)
+	if err != nil {
+		mSrv.log.Warn("grpc Server ended with error: ", err)
+	}
 
 	mSrv.Lock()
 	mSrv.runned = false
