@@ -10,6 +10,11 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	qNew   = "NEW_QUEUE_EVT"
+	msgNew = "NEW_MSG_EVT"
+)
+
 // MessageEnvelope holds the Message itself and the time when it was added
 // to the queue and the Sender id who sent the Message into the queue.
 type MessageEnvelope struct {
@@ -103,7 +108,7 @@ func (q *mQueue) loop(ctx context.Context) {
 			q.messages = append(q.messages, me)
 			q.Unlock()
 
-			q.mSrv.EmitEvent("NEW_MSG_EVT",
+			q.mSrv.EmitEvent(msgNew,
 				fmt.Sprintf(
 					"{queue: \"%s\", msg_name: \"%s\", msg_sender: \"%v\"}",
 					q.Name, me.Name, me.Sender))
@@ -144,7 +149,7 @@ func newQueue(
 	q.log.Debugw("new message queue is created",
 		"queue", name)
 
-	q.mSrv.EmitEvent("NEW_QUEUE_EVT",
+	q.mSrv.EmitEvent(qNew,
 		fmt.Sprintf("{queue: \"%s\"}", q.Name))
 
 	return &q

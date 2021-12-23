@@ -25,8 +25,18 @@ import (
 	"sync"
 
 	"github.com/dr-dobermann/srvbus/es"
+	"github.com/dr-dobermann/srvbus/internal/errs"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+)
+
+const (
+	srvNew   = "NEW_SSERVER_EVT"
+	srvStart = "SSERVER_START_EVT"
+	srvEnd   = "SSERVER_END_EVT"
+
+	svcStart = "SERVICE_START_EVT"
+	svcEnd   = "SERVICE_END_EVT"
 )
 
 // =============================================================================
@@ -171,7 +181,7 @@ func New(
 	eSrv *es.EventServer) (*ServiceServer, error) {
 
 	if log == nil {
-		return nil, fmt.Errorf("logger isn't presented")
+		return nil, errs.ErrNoLogger
 	}
 
 	if id == uuid.Nil {
@@ -190,9 +200,9 @@ func New(
 	sSrv.services = make(map[uuid.UUID]*serviceRecord)
 	sSrv.eSrv = eSrv
 
-	sSrv.emitEvent("SSERVER_CREATED", "{name: \""+sSrv.Name+"\"}")
+	sSrv.emitEvent(srvNew, "{name: \""+sSrv.Name+"\"}")
 
-	sSrv.log.Debug("service server created")
+	sSrv.log.Info("service server created")
 
 	return sSrv, nil
 }
@@ -209,6 +219,10 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 			sSrv.Lock()
 			sSrv.runned = false
 			sSrv.Unlock()
+
+			sSrv.log.Info("service server ended")
+
+			sSrv.emitEvent(srvEnd, "")
 
 			return
 
@@ -232,13 +246,12 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 			go func() {
 				sr.setState(SSRunning, nil)
 
-				sSrv.emitEvent("SVC_STARTS_EVT",
+				sSrv.emitEvent(svcStart,
 					fmt.Sprintf(
 						"{name: \"%s\", id: \"%v\"}",
 						sr.name, sr.id))
 
-				sSrv.log.Infow("service started",
-					"svc ID", id)
+				sSrv.log.Info("service started")
 
 				err := sr.svc.Run(ctx)
 
@@ -254,7 +267,7 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 
 				sr.setState(SSEnded, nil)
 
-				sSrv.emitEvent("SVC_ENDS_EVT",
+				sSrv.emitEvent(svcEnd,
 					fmt.Sprintf(
 						"{name: \"%s\", id: \"%v\", state: \"%d:%s\"}",
 						sr.name, sr.id, sr.state, sr.state.String()))
@@ -272,7 +285,7 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 // context.
 func (sSrv *ServiceServer) Run(ctx context.Context) error {
 	if sSrv.IsRunned() {
-		return fmt.Errorf("server already runned")
+		return errs.ErrAlreadyRunned
 	}
 
 	sSrv.log.Info("server starting...")
@@ -287,7 +300,7 @@ func (sSrv *ServiceServer) Run(ctx context.Context) error {
 
 	sSrv.log.Info("server started")
 
-	sSrv.emitEvent("SSERVER_STARTED_EVT", "")
+	sSrv.emitEvent(srvStart, "")
 
 	return nil
 }
@@ -300,7 +313,7 @@ func (sSrv *ServiceServer) AddService(
 	startImmediately bool) (uuid.UUID, error) {
 
 	if s == nil {
-		return uuid.Nil, fmt.Errorf("couldn't register a nil-service")
+		return uuid.Nil, errs.ErrNoService
 	}
 
 	id := uuid.New()
@@ -345,7 +358,7 @@ func (sSrv *ServiceServer) ExecService(
 	id uuid.UUID) error {
 
 	if !sSrv.IsRunned() {
-		return fmt.Errorf("server isn't running")
+		return errs.ErrNoService
 	}
 
 	sSrv.Lock()
@@ -385,7 +398,7 @@ func (sSrv *ServiceServer) ExecService(
 // StopService stops service which have non-nil stopChannel.
 func (sSrv *ServiceServer) StopService(id uuid.UUID) error {
 	if !sSrv.IsRunned() {
-		return fmt.Errorf("server isn't running")
+		return errs.ErrNotRunned
 	}
 
 	sSrv.Lock()

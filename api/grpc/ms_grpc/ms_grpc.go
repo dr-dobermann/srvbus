@@ -9,11 +9,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dr-dobermann/srvbus/internal/errs"
 	"github.com/dr-dobermann/srvbus/ms"
 	pb "github.com/dr-dobermann/srvbus/proto/gen/ms_proto"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+)
+
+const (
+	srvStart = "MS_GRPC_START_EVT"
+	srvEnd   = "MS_GRPC_END_EVT"
 )
 
 type MsgServer struct {
@@ -32,7 +38,7 @@ func New(mSrv *ms.MessageServer,
 	log *zap.SugaredLogger) (*MsgServer, error) {
 
 	if mSrv == nil {
-		return nil, fmt.Errorf("no message server given")
+		return nil, errs.ErrGrpcNoHost
 	}
 
 	if log == nil {
@@ -88,7 +94,7 @@ func (mSrv *MsgServer) SendMessages(
 	}()
 
 	if mSrv.srv == nil {
-		err = fmt.Errorf("message server is not set on grpc host")
+		err = errs.ErrGrpcNoHost
 
 		return nil, err
 	}
@@ -105,14 +111,14 @@ func (mSrv *MsgServer) SendMessages(
 
 	queue := strings.Trim(in.GetQueue(), " ")
 	if len(queue) == 0 {
-		err = fmt.Errorf("queue name is empty")
+		err = errs.ErrEmptyQueueName
 
 		return nil, err
 	}
 
 	sender, err := uuid.Parse(in.GetSenderID())
 	if err != nil {
-		err = fmt.Errorf("sender is not set")
+		err = errs.ErrNoSender
 
 		return nil, err
 	}
@@ -181,7 +187,7 @@ func (mSrv *MsgServer) GetMessages(ctx context.Context,
 
 	// check request
 	if mSrv.srv == nil {
-		err = fmt.Errorf("message server is not set on grpc host")
+		err = errs.ErrGrpcNoHost
 
 		return nil, err
 	}
@@ -204,7 +210,7 @@ func (mSrv *MsgServer) GetMessages(ctx context.Context,
 
 	queue := strings.Trim(in.GetQueue(), " ")
 	if len(queue) == 0 {
-		err = fmt.Errorf("queue name is empty")
+		err = errs.ErrEmptyQueueName
 
 		return nil, err
 	}
@@ -271,7 +277,7 @@ func (mSrv *MsgServer) HasQueue(
 
 	// check request
 	if mSrv.srv == nil {
-		err = fmt.Errorf("message server is not set on grpc host")
+		err = errs.ErrGrpcNoHost
 
 		return nil, err
 	}
@@ -287,7 +293,7 @@ func (mSrv *MsgServer) HasQueue(
 
 	queue := strings.Trim(in.GetName(), " ")
 	if len(queue) == 0 {
-		err = fmt.Errorf("queue name is empty")
+		err = errs.ErrEmptyQueueName
 
 		return nil, err
 	}
@@ -321,7 +327,7 @@ func (mSrv *MsgServer) Run(
 	opts ...grpc.ServerOption) error {
 
 	if mSrv.IsRunned() {
-		return fmt.Errorf("already runned")
+		return errs.ErrAlreadyRunned
 	}
 
 	// open listener
@@ -338,12 +344,12 @@ func (mSrv *MsgServer) Run(
 	mSrv.runned = true
 	mSrv.Unlock()
 
-	mSrv.srv.EmitEvent("MS_GRPC_START_EVT",
+	mSrv.srv.EmitEvent(srvStart,
 		fmt.Sprintf(
-			"{id: \"%v\", type: grpc, host: \"%s\", port: %s}",
-			mSrv.srv.ID(), host, port))
+			"{type: \"grpc\", host: \"%s\", port: %s}",
+			host, port))
 
-	mSrv.log.Infow("server started",
+	mSrv.log.Infow("grpc server started",
 		zap.String("host", host),
 		zap.String("post", port))
 
@@ -358,19 +364,16 @@ func (mSrv *MsgServer) Run(
 	// run grpc server
 	err = grpcServer.Serve(l)
 	if err != nil {
-		mSrv.log.Warn("grpc Server ended with error: ", err)
+		mSrv.log.Warnw("grpc Server ended with error: ", zap.Error(err))
 	}
 
 	mSrv.Lock()
 	mSrv.runned = false
 	mSrv.Unlock()
 
-	mSrv.log.Info("server stopped")
+	mSrv.log.Infow("grpc server stopped")
 
-	mSrv.srv.EmitEvent("MS_GRPC_STOP_EVT",
-		fmt.Sprintf(
-			"{id: \"%v\"}",
-			mSrv.srv.ID()))
+	mSrv.srv.EmitEvent(srvEnd, "")
 
 	return err
 }

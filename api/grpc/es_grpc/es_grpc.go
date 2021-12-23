@@ -9,10 +9,16 @@ import (
 	"time"
 
 	"github.com/dr-dobermann/srvbus/es"
+	"github.com/dr-dobermann/srvbus/internal/errs"
 	pb "github.com/dr-dobermann/srvbus/proto/gen/es_proto"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+)
+
+const (
+	srvStart = "ES_GRPC_START_EVT"
+	srvEnd   = "ES_GRPC_END_EVT"
 )
 
 type EvtServer struct {
@@ -30,7 +36,7 @@ type EvtServer struct {
 
 func New(eSrv *es.EventServer, log *zap.SugaredLogger) (*EvtServer, error) {
 	if eSrv == nil {
-		return nil, fmt.Errorf("host server isn't set")
+		return nil, errs.ErrGrpcNoHost
 	}
 
 	if log == nil {
@@ -49,7 +55,7 @@ func (eSrv *EvtServer) Run(
 	opts ...grpc.ServerOption) error {
 
 	if eSrv.IsRunned() {
-		return fmt.Errorf("already runned")
+		return errs.ErrAlreadyRunned
 	}
 
 	l, err := net.Listen("tcp", fmt.Sprintf("%s:%s", host, port))
@@ -80,7 +86,25 @@ func (eSrv *EvtServer) Run(
 		grpcServer.Stop()
 	})
 
+	srvDescr := fmt.Sprintf("{name: \"\", id: \"\"}",
+		eSrv.srv.Name, eSrv.srv.ID)
+
+	topic := "/server"
+
+	err = eSrv.srv.AddEvent(topic,
+		es.MustEvent(es.NewEventWithString(srvStart, srvDescr)),
+		eSrv.srv.ID)
+	if err != nil {
+		eSrv.log.Warnw("couldn't add an event",
+			zap.String("topic", topic),
+			zap.Error(err))
+	}
+
 	// run grpc server
+	eSrv.log.Infow("grpc server started",
+		zap.String("host", host),
+		zap.String("post", port))
+
 	err = grpcServer.Serve(l)
 	if err != nil {
 		eSrv.log.Warn("grpc Server ended with error: ", err)
@@ -90,7 +114,16 @@ func (eSrv *EvtServer) Run(
 	eSrv.runned = false
 	eSrv.Unlock()
 
-	eSrv.log.Info("server stopped")
+	err = eSrv.srv.AddEvent(topic,
+		es.MustEvent(es.NewEventWithString(srvEnd, srvDescr)),
+		eSrv.srv.ID)
+	if err != nil {
+		eSrv.log.Warnw("couldn't add an event",
+			zap.String("topic", topic),
+			zap.Error(err))
+	}
+
+	eSrv.log.Info("grpc server stopped")
 
 	return err
 }
@@ -124,7 +157,7 @@ func (eSrv *EvtServer) HasTopic(
 	}()
 
 	if !eSrv.IsRunned() {
-		return nil, fmt.Errorf("server isn't runned")
+		return nil, errs.ErrNotRunned
 	}
 
 	srvID, err := eSrv.checkServerID(in.GetServerId())
@@ -170,7 +203,7 @@ func (eSrv *EvtServer) AddTopics(
 	}()
 
 	if !eSrv.IsRunned() {
-		return nil, fmt.Errorf("server isn't runned")
+		return nil, errs.ErrNotRunned
 	}
 
 	srvID, err := eSrv.checkServerID(in.GetServerId())
@@ -229,7 +262,7 @@ func (eSrv *EvtServer) DelTopics(
 	}()
 
 	if !eSrv.IsRunned() {
-		return nil, fmt.Errorf("server isn't runned")
+		return nil, errs.ErrNotRunned
 	}
 
 	srvID, err := eSrv.checkServerID(in.GetServerId())
@@ -279,7 +312,7 @@ func (eSrv *EvtServer) AddEvent(
 	}()
 
 	if !eSrv.IsRunned() {
-		return nil, fmt.Errorf("server isn't runned")
+		return nil, errs.ErrNotRunned
 	}
 
 	srvID, err := eSrv.checkServerID(in.GetServerId())
@@ -332,7 +365,7 @@ func (eSrv *EvtServer) Subscribe(
 	}()
 
 	if !eSrv.IsRunned() {
-		return fmt.Errorf("server isn't runned")
+		return errs.ErrNotRunned
 	}
 
 	srvID, err := eSrv.checkServerID(in.GetServerId())
@@ -467,7 +500,7 @@ func (eSrv *EvtServer) UnSubscribe(
 	}()
 
 	if !eSrv.IsRunned() {
-		return nil, fmt.Errorf("server isn't runned")
+		return nil, errs.ErrNotRunned
 	}
 
 	srvID, err := eSrv.checkServerID(in.GetServerId())

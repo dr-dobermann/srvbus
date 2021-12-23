@@ -23,8 +23,15 @@ import (
 	"sync"
 
 	"github.com/dr-dobermann/srvbus/es"
+	"github.com/dr-dobermann/srvbus/internal/errs"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+)
+
+const (
+	srvNew   = "NEW_MSERVER_EVT"
+	srvStart = "MSERVER_START_EVT"
+	srvEnd   = "MSERVER_END_EVT"
 )
 
 /// MessageServer holds all the Message Server data.
@@ -162,13 +169,14 @@ func New(
 	eSrv *es.EventServer) (*MessageServer, error) {
 
 	if log == nil {
-		return nil, fmt.Errorf("logger isn't present")
+		return nil, errs.ErrNoLogger
 	}
 
 	if id == uuid.Nil {
 		id = uuid.New()
 	}
 
+	name = strings.Trim(name, " ")
 	if name == "" {
 		name = "MsgServer #" + id.String()
 	}
@@ -176,22 +184,20 @@ func New(
 	ms := &MessageServer{
 		id:   id,
 		Name: name,
-		log:  log.Named("MS: " + name + "#" + id.String()),
+		log:  log.Named("MS: [" + name + "] #" + id.String()),
 		eSrv: eSrv}
 
 	log.Debug("message server created")
 
-	ms.EmitEvent("NEW_MSERVER_EVT", "")
+	ms.EmitEvent(srvNew, "")
 
 	return ms, nil
 }
 
 // Run starts the Message Server if it isn't started.
-func (mSrv *MessageServer) Run(ctx context.Context) {
+func (mSrv *MessageServer) Run(ctx context.Context) error {
 	if mSrv.IsRunned() {
-		mSrv.log.Warn("alredy runned")
-
-		return
+		return errs.ErrAlreadyRunned
 	}
 
 	// all old queues should be deleted
@@ -203,7 +209,7 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 
 	mSrv.log.Info("server started")
 
-	mSrv.EmitEvent("MSERVER_START_EVT", "")
+	mSrv.EmitEvent(srvStart, "")
 
 	go func() {
 		<-ctx.Done()
@@ -216,8 +222,10 @@ func (mSrv *MessageServer) Run(ctx context.Context) {
 
 		mSrv.log.Info("server stopped")
 
-		mSrv.EmitEvent("MSERVER_STOP_EVT", "")
+		mSrv.EmitEvent(srvEnd, "")
 	}()
+
+	return nil
 }
 
 // PutMessages inserts messages into the queue.
@@ -235,16 +243,15 @@ func (mSrv *MessageServer) PutMessages(
 
 	queue = strings.Trim(queue, " ")
 	if queue == "" {
-		return fmt.Errorf("couldn't puth messages into " +
-			"an empty queue")
+		return errs.ErrEmptyQueueName
 	}
 
 	if sender == uuid.Nil {
-		return fmt.Errorf("sender isn't specified")
+		return errs.ErrNoSender
 	}
 
 	if len(msgs) == 0 {
-		return fmt.Errorf("no messages")
+		return errs.ErrEmptyMessage
 	}
 
 	mSrv.Lock()
@@ -252,7 +259,7 @@ func (mSrv *MessageServer) PutMessages(
 
 	// check if the server is running
 	if !mSrv.runned {
-		return fmt.Errorf("server isn't runned")
+		return errs.ErrNotRunned
 	}
 
 	q, ok := mSrv.queues[queue]
@@ -288,7 +295,7 @@ func (mSrv *MessageServer) GetMessages(
 
 	// check if the server is ruuning
 	if !mSrv.IsRunned() {
-		return nil, fmt.Errorf("server isn't runned")
+		return nil, errs.ErrNotRunned
 	}
 
 	mSrv.Lock()
@@ -340,11 +347,11 @@ func (mSrv *MessageServer) WaitForQueue(
 	queue string) (chan bool, error) {
 
 	if !mSrv.IsRunned() {
-		return nil, fmt.Errorf("server isn't running")
+		return nil, errs.ErrNotRunned
 	}
 
 	if queue == "" {
-		return nil, fmt.Errorf("queue name is empty")
+		return nil, errs.ErrEmptyQueueName
 	}
 
 	wCh := make(chan bool, 1)

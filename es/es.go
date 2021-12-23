@@ -26,7 +26,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// var errNotImplementedYet = fmt.Errorf("not implemented yet")
+const (
+	topicNew = "NEW_TOPIC_EVT"
+	topicDel = "TOPIC_REMOVE_EVT"
+
+	subsNew = "NEW_SUBSCRIPTION_EVT"
+	subsDel = "SUBSCRIPTION_REMOVE_EVT"
+
+	defaultTopic = "/server"
+)
 
 // EventServerError is a error wrapper for Event Server and his things.
 type EventServerError struct {
@@ -52,7 +60,7 @@ func newESErr(
 // Error implements fmt.Error interface for EventServiceError
 func (ese EventServerError) Error() string {
 
-	return fmt.Sprintf("ES: %s # %v. ERROR: %s : %v",
+	return fmt.Sprintf("ES: [%s] # %v. ERROR: %s : %v",
 		ese.Name,
 		ese.ID,
 		ese.Msg,
@@ -230,8 +238,8 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			nt.run(eSrv.ctx)
 		}
 
-		return eSrv.AddEvent(default_topic,
-			MustEvent(NewEventWithString("TOPIC_CREATED_EVT", name)),
+		return eSrv.AddEvent(defaultTopic,
+			MustEvent(NewEventWithString(topicNew, name)),
 			eSrv.ID)
 	}
 
@@ -254,8 +262,8 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			"couldn't add subtopic '%s' topic to '%s'", name, branch)
 	}
 
-	return eSrv.AddEvent(default_topic,
-		MustEvent(NewEventWithString("TOPIC_CREATED_EVT", name)),
+	return eSrv.AddEvent(defaultTopic,
+		MustEvent(NewEventWithString(topicNew, name)),
 		eSrv.ID)
 }
 
@@ -322,8 +330,8 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 		eSrv.log.Debugw("root topic deleted",
 			"topic", topic)
 
-		return eSrv.AddEvent(default_topic,
-			MustEvent(NewEventWithString("TOPIC_DELETED_EVT", topic)),
+		return eSrv.AddEvent(defaultTopic,
+			MustEvent(NewEventWithString(topicDel, topic)),
 			eSrv.ID)
 	}
 
@@ -348,9 +356,9 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 	eSrv.log.Debugw("topic deleted",
 		"topic", topic)
 
-	return eSrv.AddEvent(default_topic,
+	return eSrv.AddEvent(defaultTopic,
 		MustEvent(
-			NewEventWithString("TOPIC_DELETED_EVT", topic)),
+			NewEventWithString(topicDel, topic)),
 		eSrv.ID)
 }
 
@@ -427,8 +435,8 @@ func (eSrv *EventServer) Subscribe(
 			return newESErr(eSrv, err, "subscription #%d failed", i)
 		}
 
-		if err := eSrv.AddEvent(default_topic,
-			MustEvent(NewEventWithString("SUBSCRIBED_EVT",
+		if err := eSrv.AddEvent(defaultTopic,
+			MustEvent(NewEventWithString(subsNew,
 				fmt.Sprintf("#%v to '%s'", subscriber, s.Topic))),
 			eSrv.ID); err != nil {
 
@@ -468,8 +476,8 @@ func (eSrv *EventServer) UnSubscribe(
 				"unsubscription form topic %s failed", s)
 		}
 
-		if err := eSrv.AddEvent(default_topic,
-			MustEvent(NewEventWithString("UNSUBSCRIBED_EVT",
+		if err := eSrv.AddEvent(defaultTopic,
+			MustEvent(NewEventWithString(subsDel,
 				fmt.Sprintf("#%v to '%s'", subscriber, s))),
 			eSrv.ID); err != nil {
 
@@ -479,10 +487,6 @@ func (eSrv *EventServer) UnSubscribe(
 
 	return nil
 }
-
-const (
-	default_topic = "/server"
-)
 
 // Creates a new EventServer.
 func New(
@@ -496,8 +500,9 @@ func New(
 
 	if name == "" {
 		i := id.String()
-		name = "EventServer #" + i[len(i)-4:]
+		name = "UNNAMED #" + i[len(i)-4:]
 	}
+
 	if log == nil {
 		return nil,
 			fmt.Errorf("log is absent for serverv %s # %v",
@@ -507,8 +512,8 @@ func New(
 	eSrv := new(EventServer)
 	eSrv.Name = name
 	eSrv.ID = id
-	eSrv.log = log.Named("ES: " + eSrv.Name +
-		" #" + eSrv.ID.String())
+	eSrv.log = log.Named("ES: [" + eSrv.Name +
+		"] #" + eSrv.ID.String())
 	eSrv.topics = make(map[string]*Topic)
 
 	eSrv.log.Info("event server created")
@@ -547,11 +552,11 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 	eSrv.runned = true
 
 	// add server's default topic
-	if err := eSrv.AddTopic(default_topic, "/"); err != nil {
+	if err := eSrv.AddTopic(defaultTopic, "/"); err != nil {
 		return newESErr(
 			eSrv,
 			err,
-			"couldn't add default topic '%s'", default_topic)
+			"couldn't add default topic '%s'", defaultTopic)
 	}
 
 	eSrv.log.Info("event server started")
