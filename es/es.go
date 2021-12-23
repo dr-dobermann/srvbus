@@ -34,6 +34,12 @@ const (
 	subsDel = "SUBSCRIPTION_REMOVE_EVT"
 
 	defaultTopic = "/server"
+
+	RootTopic = "/"
+
+	// Run flag
+	NormalRun = false
+	CleanRun  = true
 )
 
 // EventServerError is a error wrapper for Event Server and his things.

@@ -21,6 +21,8 @@ const (
 	srvEnd   = "ES_GRPC_END_EVT"
 )
 
+var UseHostLogger *zap.SugaredLogger
+
 type EvtServer struct {
 	sync.Mutex
 
@@ -69,10 +71,6 @@ func (eSrv *EvtServer) Run(
 	eSrv.Lock()
 	eSrv.runned = true
 	eSrv.Unlock()
-
-	eSrv.log.Infow("server started",
-		zap.String("host", host),
-		zap.String("post", port))
 
 	// start delayed context cancel listener to stop
 	// grpc server once context cancelled
