@@ -24,10 +24,10 @@ func (f filterFunc) check(ee EventEnvelope) bool {
 }
 
 const (
-	FromBegin      int = 0
+	FromBegin     int = 0
 	OnlyNewEvents int = -1
 
-	Recursive      bool = true
+	Recursive    bool = true
 	OnlyOneTopic bool = false
 )
 
@@ -153,12 +153,16 @@ func (s *subscription) filter(ee *EventEnvelope) *EventEnvelope {
 		go func() {
 			s.Lock()
 			defer s.Unlock()
-			res := f.check(*ee)
-			if !res {
 
+			defer wg.Done()
+
+			if *filterFail {
+				return
+			}
+
+			if !f.check(*ee) {
 				*filterFail = true
 			}
-			wg.Done()
 		}()
 	}
 
@@ -167,13 +171,6 @@ func (s *subscription) filter(ee *EventEnvelope) *EventEnvelope {
 	if *filterFail {
 		return nil
 	}
-
-	// // sequental filtration
-	// for _, f := range s.filters {
-	// 	if !f.check(ee.event.Name, ee.event.Data()) {
-	// 		return nil
-	// 	}
-	// }
 
 	return ee
 }

@@ -26,6 +26,9 @@ service EventService {
 
     // cancels subsciptions for one or many topics on the host server.
     rpc UnSubscribe(UnsubsibeRequest) returns (OpResponse) {}
+
+    // stops the event envelope stream opened by Subscribe
+    rpc StopSubsStream(StopSubsStreamReq) returns (OpResponse) {}
 }
 
 message TopicRequest {
@@ -96,7 +99,7 @@ message Event {
     // event details
     string evt_details              = 2;
 
-    // event time
+    // event time in unix milliseconds
     int64 timestamp                 = 3;
 }
 
@@ -109,6 +112,11 @@ message SubscriptionRequest {
 
     // subscription list
     repeated Subscription subscriptions     = 3;
+
+    // subscription stream id used for stopping
+    // grpc stream.
+    // 
+    string subscr_stream_id                 = 4;
 }
 
 message Subscription {
@@ -164,4 +172,8 @@ message UnsubsibeRequest {
 
     // topics to unsubscribe from
     repeated string topics          = 3;
+}
+
+message StopSubsStreamReq {
+    string subscr_stream_id         = 1;
 }

@@ -30,6 +30,8 @@ type EventServiceClient interface {
 	Subscribe(ctx context.Context, in *SubscriptionRequest, opts ...grpc.CallOption) (EventService_SubscribeClient, error)
 	// cancels subsciptions for one or many topics on the host server.
 	UnSubscribe(ctx context.Context, in *UnsubsibeRequest, opts ...grpc.CallOption) (*OpResponse, error)
+	// stops the event envelope stream opened by Subscribe
+	StopSubsStream(ctx context.Context, in *StopSubsStreamReq, opts ...grpc.CallOption) (*OpResponse, error)
 }
 
 type eventServiceClient struct {
@@ -117,6 +119,15 @@ func (c *eventServiceClient) UnSubscribe(ctx context.Context, in *UnsubsibeReque
 	return out, nil
 }
 
+func (c *eventServiceClient) StopSubsStream(ctx context.Context, in *StopSubsStreamReq, opts ...grpc.CallOption) (*OpResponse, error) {
+	out := new(OpResponse)
+	err := c.cc.Invoke(ctx, "/es_proto.EventService/StopSubsStream", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // EventServiceServer is the server API for EventService service.
 // All implementations must embed UnimplementedEventServiceServer
 // for forward compatibility
@@ -133,6 +144,8 @@ type EventServiceServer interface {
 	Subscribe(*SubscriptionRequest, EventService_SubscribeServer) error
 	// cancels subsciptions for one or many topics on the host server.
 	UnSubscribe(context.Context, *UnsubsibeRequest) (*OpResponse, error)
+	// stops the event envelope stream opened by Subscribe
+	StopSubsStream(context.Context, *StopSubsStreamReq) (*OpResponse, error)
 	mustEmbedUnimplementedEventServiceServer()
 }
 
@@ -157,6 +170,9 @@ func (UnimplementedEventServiceServer) Subscribe(*SubscriptionRequest, EventServ
 }
 func (UnimplementedEventServiceServer) UnSubscribe(context.Context, *UnsubsibeRequest) (*OpResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnSubscribe not implemented")
+}
+func (UnimplementedEventServiceServer) StopSubsStream(context.Context, *StopSubsStreamReq) (*OpResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StopSubsStream not implemented")
 }
 func (UnimplementedEventServiceServer) mustEmbedUnimplementedEventServiceServer() {}
 
@@ -282,6 +298,24 @@ func _EventService_UnSubscribe_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _EventService_StopSubsStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StopSubsStreamReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).StopSubsStream(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/es_proto.EventService/StopSubsStream",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).StopSubsStream(ctx, req.(*StopSubsStreamReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // EventService_ServiceDesc is the grpc.ServiceDesc for EventService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -308,6 +342,10 @@ var EventService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnSubscribe",
 			Handler:    _EventService_UnSubscribe_Handler,
+		},
+		{
+			MethodName: "StopSubsStream",
+			Handler:    _EventService_StopSubsStream_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

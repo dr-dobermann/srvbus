@@ -70,6 +70,7 @@ func (eSrv *EvtServer) Run(
 
 	eSrv.Lock()
 	eSrv.runned = true
+	eSrv.ctx = ctx
 	eSrv.Unlock()
 
 	// start delayed context cancel listener to stop
@@ -397,7 +398,7 @@ func (*EvtServer) sendEvents(
 			return ctx.Err()
 
 		case ee := <-evtChan:
-			di := ee.What().DataItem
+			evt := ee.What()
 
 			env := pb.EventEnvelope{
 				ServerId: srvID.String(),
@@ -405,9 +406,9 @@ func (*EvtServer) sendEvents(
 				SenderId: ee.Publisher.String(),
 				RegAt:    ee.RegAt.String(),
 				Event: &pb.Event{
-					EvtName:    ee.What().Name,
-					EvtDetails: string(di.Data()),
-					Timestamp:  ee.What().At.Unix()}}
+					EvtName:    evt.Name,
+					EvtDetails: string(evt.Data()),
+					Timestamp:  evt.At.Unix()}}
 
 			if err := stream.Send(&env); err != nil {
 				return fmt.Errorf(
