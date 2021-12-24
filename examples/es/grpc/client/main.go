@@ -41,22 +41,24 @@ func main() {
 	// 		return nil, fmt.Errorf("failed to create GRPC connection: %w", err)
 	// 	}
 
+	// open grpc connection
 	conn, err := grpc.Dial(fmt.Sprintf("%s:%d", *host, *port), opts...)
 	if err != nil {
 		panic("couldn't dial an grpc server: " + err.Error())
 	}
-
 	defer conn.Close()
 
+	// initialize the grpc EventServer client
 	client := pb.NewEventServiceClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	subscriberID := uuid.New()
 
 	streamID := uuid.New()
 
+	// subscribe on event stream from topic
 	events, err := client.Subscribe(ctx, &pb.SubscriptionRequest{
 		ServerId:     *srvID,
 		SubscriberId: subscriberID.String(),
@@ -73,10 +75,11 @@ func main() {
 		SubsStreamId: streamID.String(),
 	})
 	if err != nil {
-		fmt.Println("couldn't open an stream:", err)
+		fmt.Println("couldn't open an event stream:", err)
 		return
 	}
 
+	// close event stream after 5 seconds
 	time.AfterFunc(5*time.Second, func() {
 		_, err := client.StopSubscriptionStream(ctx, &pb.StopStreamRequest{
 			ServerId:     *srvID,
@@ -92,10 +95,7 @@ func main() {
 		fmt.Println("event streamer stopped")
 	})
 
-	if err != nil {
-		panic("couldn't subscribe:" + err.Error())
-	}
-
+	// read all events from the stream
 	for {
 		evtEnv, err := events.Recv()
 		if err == io.EOF {
