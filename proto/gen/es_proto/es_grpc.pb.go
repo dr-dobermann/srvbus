@@ -30,6 +30,9 @@ type EventServiceClient interface {
 	Subscribe(ctx context.Context, in *SubscriptionRequest, opts ...grpc.CallOption) (EventService_SubscribeClient, error)
 	// cancels subsciptions for one or many topics on the host server.
 	UnSubscribe(ctx context.Context, in *UnsubsibeRequest, opts ...grpc.CallOption) (*OpResponse, error)
+	// stops event streaming service of subscription events.
+	// UnSubscribe only stops sending events into the channel, but not
+	// stops the streaming service.
 	StopSubscriptionStream(ctx context.Context, in *StopStreamRequest, opts ...grpc.CallOption) (*OpResponse, error)
 }
 
@@ -143,6 +146,9 @@ type EventServiceServer interface {
 	Subscribe(*SubscriptionRequest, EventService_SubscribeServer) error
 	// cancels subsciptions for one or many topics on the host server.
 	UnSubscribe(context.Context, *UnsubsibeRequest) (*OpResponse, error)
+	// stops event streaming service of subscription events.
+	// UnSubscribe only stops sending events into the channel, but not
+	// stops the streaming service.
 	StopSubscriptionStream(context.Context, *StopStreamRequest) (*OpResponse, error)
 	mustEmbedUnimplementedEventServiceServer()
 }
