@@ -18,7 +18,7 @@ var (
 	port  = flag.Int("port", 50051, "event server grpc port")
 	srvID = flag.String("evt_srv_ID", "00000000-0000-0000-0000-000000000000", "event server ID")
 
-	debug = flag.Bool("debug", false, "run with debug output")
+	// debug = flag.Bool("debug", false, "run with debug output")
 )
 
 func main() {
@@ -31,6 +31,16 @@ func main() {
 
 	flag.Parse()
 
+	// client, err := encoding.GRPCDial(address,
+	// 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	// 		grpc.FailOnNonTempDialError(true),
+	// 		grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 50 * time.Second, Backoff: backoff.DefaultConfig}), // nolint:gomnd
+	// 		grpc.WithReturnConnectionError(),
+	// 	)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("failed to create GRPC connection: %w", err)
+	// 	}
+
 	conn, err := grpc.Dial(fmt.Sprintf("%s:%d", *host, *port), opts...)
 	if err != nil {
 		panic("couldn't dial an grpc server: " + err.Error())
@@ -40,7 +50,7 @@ func main() {
 
 	client := pb.NewEventServiceClient(conn)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	subscriberID := uuid.New()
@@ -82,6 +92,10 @@ func main() {
 		fmt.Println("event streamer stopped")
 	})
 
+	if err != nil {
+		panic("couldn't subscribe:" + err.Error())
+	}
+
 	for {
 		evtEnv, err := events.Recv()
 		if err == io.EOF {
@@ -93,12 +107,12 @@ func main() {
 			return
 		}
 
-		fmt.Printf("Got event: %s\n  From: %s\n  At: %s\n"+
+		fmt.Printf("Got event: %s\n  From: %s\n  At: %v\n"+
 			"  Topic: %s\n  Details: %s\n",
-			evtEnv.GetEvent().GetEvtName(),
+			evtEnv.GetEvent().EvtName,
 			evtEnv.GetSenderId(),
-			evtEnv.GetRegAt(),
+			time.Unix(evtEnv.GetEvent().Timestamp, 0),
 			evtEnv.GetTopic(),
-			evtEnv.GetEvent().GetEvtDetails())
+			evtEnv.GetEvent().EvtDetails)
 	}
 }

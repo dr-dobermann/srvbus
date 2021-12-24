@@ -101,7 +101,7 @@ message Event {
     // event details
     string evt_details              = 2;
 
-    // event time
+    // event time in unix milliseconds
     int64 timestamp                 = 3;
 }
 
