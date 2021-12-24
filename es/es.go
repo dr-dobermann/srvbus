@@ -89,6 +89,28 @@ type EventServer struct {
 
 	// running context
 	ctx context.Context
+
+	esTopic string
+}
+
+// emits single event into the personal message server topic
+// if the Event Server was given on New call.
+func (eSrv *EventServer) emitEvent(name, descr string) {
+
+	// initialize default server topic if needed
+	if eSrv.esTopic == "" {
+		topic := defaultTopic
+		if err := eSrv.AddTopicQueue(topic, "/"); err != nil {
+			eSrv.log.Warnw("couldn't add topic to Event Server",
+				zap.String("topic", topic),
+				zap.Error(err))
+
+			return
+		}
+		eSrv.esTopic = topic
+	}
+
+	EmitEvent(eSrv, eSrv.esTopic, name, descr, eSrv.ID)
 }
 
 // Logger returns a pointer to the internal logger of
@@ -244,9 +266,9 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			nt.run(eSrv.ctx)
 		}
 
-		return eSrv.AddEvent(defaultTopic,
-			MustEvent(NewEventWithString(topicNew, name)),
-			eSrv.ID)
+		eSrv.emitEvent(topicNew, "{topic: "+name+"}")
+
+		return nil
 	}
 
 	// if there is topic in eSrv.topics which is the first
@@ -268,9 +290,9 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			"couldn't add subtopic '%s' topic to '%s'", name, branch)
 	}
 
-	return eSrv.AddEvent(defaultTopic,
-		MustEvent(NewEventWithString(topicNew, name)),
-		eSrv.ID)
+	eSrv.emitEvent(topicNew, "{topic: "+name+"}")
+
+	return nil
 }
 
 // AddTopicQueue add a whole branch of topics at once.
@@ -336,9 +358,9 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 		eSrv.log.Debugw("root topic deleted",
 			"topic", topic)
 
-		return eSrv.AddEvent(defaultTopic,
-			MustEvent(NewEventWithString(topicDel, topic)),
-			eSrv.ID)
+		eSrv.emitEvent(topicDel, topic)
+
+		return nil
 	}
 
 	// get the topic which owns the selected one
@@ -362,10 +384,9 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 	eSrv.log.Debugw("topic deleted",
 		"topic", topic)
 
-	return eSrv.AddEvent(defaultTopic,
-		MustEvent(
-			NewEventWithString(topicDel, topic)),
-		eSrv.ID)
+	eSrv.emitEvent(topicDel, "{topic: "+topic+"}")
+
+	return nil
 }
 
 // AddEvent add an Event into the topic.
@@ -441,13 +462,9 @@ func (eSrv *EventServer) Subscribe(
 			return newESErr(eSrv, err, "subscription #%d failed", i)
 		}
 
-		if err := eSrv.AddEvent(defaultTopic,
-			MustEvent(NewEventWithString(subsNew,
-				fmt.Sprintf("#%v to '%s'", subscriber, s.Topic))),
-			eSrv.ID); err != nil {
-
-			return newESErr(eSrv, err, "couldn't add topic creation event")
-		}
+		eSrv.emitEvent(subsNew,
+			fmt.Sprintf("{subscriber_id: \"%v\", topic: \"%s\"}",
+				subscriber, s.Topic))
 	}
 
 	return nil
@@ -482,13 +499,9 @@ func (eSrv *EventServer) UnSubscribe(
 				"unsubscription form topic %s failed", s)
 		}
 
-		if err := eSrv.AddEvent(defaultTopic,
-			MustEvent(NewEventWithString(subsDel,
-				fmt.Sprintf("#%v to '%s'", subscriber, s))),
-			eSrv.ID); err != nil {
-
-			return newESErr(eSrv, err, "couldn't add topic creation event")
-		}
+		eSrv.emitEvent(subsDel,
+			fmt.Sprintf("{subscriber_id: \"%v\", topic: \"%s\"",
+				subscriber, s))
 	}
 
 	return nil
@@ -606,4 +619,35 @@ func (eSrv *EventServer) Statistics() []TopicInfo {
 func (ti TopicInfo) String() string {
 
 	return str(ti, 0)
+}
+
+// =============================================================================
+// emits single event into the selected topic.
+func EmitEvent(
+	eSrv *EventServer,
+	topic, name, descr string,
+	senderID uuid.UUID) {
+
+	if eSrv == nil {
+		return
+	}
+
+	evt, err := NewEventWithString(name, descr)
+	if err != nil {
+		eSrv.log.Warnw("couldn't create an event",
+			zap.String("evt_name", name),
+			zap.String("senderID", senderID.String()),
+			zap.Error(err))
+
+		return
+	}
+
+	if err := eSrv.AddEvent(topic, evt, senderID); err != nil {
+		eSrv.log.Warnw("couldn't register an event",
+			zap.String("evt_name", name),
+			zap.String("senderID", senderID.String()),
+			zap.Error(err))
+
+		return
+	}
 }

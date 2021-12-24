@@ -121,8 +121,8 @@ type ServiceServer struct {
 
 	runned bool
 
-	eSrv     *es.EventServer
-	es_topic string
+	eSrv    *es.EventServer
+	esTopic string
 }
 
 func (sSrv *ServiceServer) IsRunned() bool {
@@ -140,7 +140,7 @@ func (sSrv *ServiceServer) emitEvent(name, descr string) {
 	}
 
 	// initialize default server topic if needed
-	if sSrv.es_topic == "" {
+	if sSrv.esTopic == "" {
 		topic := "/s2/" + sSrv.ID.String()
 		if err := sSrv.eSrv.AddTopicQueue(topic, "/"); err != nil {
 			sSrv.log.Warnw("couldn't add topic to Event Server",
@@ -150,27 +150,10 @@ func (sSrv *ServiceServer) emitEvent(name, descr string) {
 				"err", err)
 			return
 		}
-		sSrv.es_topic = topic
+		sSrv.esTopic = topic
 	}
 
-	evt, err := es.NewEventWithString(name, descr)
-	if err != nil {
-		sSrv.log.Warnw("couldn't create an event",
-			"eSrvName", sSrv.eSrv.Name,
-			"eSrvID", sSrv.eSrv.ID,
-			"evt_name", name,
-			"err", err)
-		return
-	}
-
-	if err := sSrv.eSrv.AddEvent(sSrv.es_topic, evt, sSrv.ID); err != nil {
-		sSrv.log.Warnw("couldn't register an event",
-			"eSrvName", sSrv.eSrv.Name,
-			"eSrvID", sSrv.eSrv.ID,
-			"evt_name", name,
-			"err", err)
-		return
-	}
+	es.EmitEvent(sSrv.eSrv, sSrv.esTopic, name, descr, sSrv.ID)
 }
 
 // New creates a new ServiceServer and returns its pointer.

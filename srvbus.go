@@ -6,11 +6,22 @@ import (
 	"sync"
 
 	"github.com/dr-dobermann/srvbus/es"
+	"github.com/dr-dobermann/srvbus/internal/errs"
 	"github.com/dr-dobermann/srvbus/ms"
 	"github.com/dr-dobermann/srvbus/s2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
+
+type SBusErr struct {
+	sbID uuid.UUID
+	msg  string
+	Err  error
+}
+
+func (sbErr SBusErr) Error() string {
+	return fmt.Sprintf("SBErr[%v] %s: %w", sbErr.sbID, sbErr.msg, sbErr.Err)
+}
 
 type ServiceBus struct {
 	sync.Mutex
@@ -56,7 +67,24 @@ func New(id uuid.UUID, log *zap.SugaredLogger) (*ServiceBus, error) {
 
 	sb := &ServiceBus{
 		id:  id,
-		log: log.Named("SB: " + id.String()),
+		log: log.Named("SB:  " + id.String()),
+	}
+
+	var err error
+
+	sb.eSrv, err = es.New(uuid.New(), "SB_ES", log)
+	if err != nil {
+		return nil, SBusErr{id, "couldn't create an Event Server", err}
+	}
+
+	sb.mSrv, err = ms.New(uuid.New(), "SB_MS", log, sb.eSrv)
+	if err != nil {
+		return nil, SBusErr{id, "couldn't create a Message Server", err}
+	}
+
+	sb.sSrv, err = s2.New(uuid.New(), "SB_S2", log, sb.eSrv)
+	if err != nil {
+		return nil, SBusErr{id, "couldn't create a Service Server", err}
 	}
 
 	sb.log.Info("service bus created")
@@ -66,68 +94,49 @@ func New(id uuid.UUID, log *zap.SugaredLogger) (*ServiceBus, error) {
 
 func (sb *ServiceBus) Run(ctx context.Context) error {
 	if sb.IsRunned() {
-		sb.log.Warn("service bus already runned")
-		return nil
+		return errs.ErrAlreadyRunned
 	}
 
 	sb.ctx = ctx
 
-	// run or rerun EventServer
+	// run event server first so all others could emit events
+	// just on time they runned
 	if sb.eSrv == nil {
-		eSrv, err := es.New(uuid.Nil, "SB_ES", sb.log)
-		if err != nil {
-			return fmt.Errorf("couldn't create EventServer: %v", err)
-		}
-
-		sb.eSrv = eSrv
-
-		err = sb.eSrv.Run(ctx, false)
-		if err != nil {
-			return fmt.Errorf("coudln't run event server: %v", err)
-		}
-
-		topic := "/srvbus/" + sb.id.String()
-		if !sb.eSrv.HasTopic(topic) {
-			if err := sb.eSrv.AddTopicQueue(topic, "/"); err != nil {
-				return fmt.Errorf("couldn't create SB topic '%s'", topic)
-			}
-		}
-
-		sb.topic = topic
+		return SBusErr{sb.id, "Event Server is absent", nil}
 	}
 
-	// run or rerun MessageServer
+	if err := sb.eSrv.Run(ctx, false); err != nil {
+		return SBusErr{sb.id, "couldn't run an Event Server", err}
+	}
+
+	// run message server
 	if sb.mSrv == nil {
-		mSrv, err := ms.New(uuid.Nil, "SB_MS", sb.log, sb.eSrv)
-		if err != nil {
-			return fmt.Errorf("couldn't create MessageServer: %v", err)
-		}
-
-		sb.mSrv = mSrv
-
-		sb.mSrv.Run(ctx)
+		return SBusErr{sb.id, "Message Server is absent", nil}
 	}
 
-	// run or rerun ServiceServer
+	if err := sb.mSrv.Run(ctx); err != nil {
+		return SBusErr{sb.id, "couldn't run a Message Server", err}
+	}
+
+	// run service server
 	if sb.sSrv == nil {
-		sSrv, err := s2.New(uuid.Nil, "SB_S2", sb.log, sb.eSrv)
-		if err != nil {
-			return fmt.Errorf("couldn't create ServiceServer: %v", err)
-		}
-
-		sb.sSrv = sSrv
-
-		err = sb.sSrv.Run(ctx)
-		if err != nil {
-			return fmt.Errorf("couldn't run ServiceServer: %v", err)
-		}
+		return SBusErr{sb.id, "Service Server is absent", nil}
 	}
 
-	// evt, err := es.NewEventWithString(
-	// 	"SB_STARTED_EVT",
-	// 	fmt.Sprintf("{id: \"%v\"}", sb.id))
-	// if err != nil
-	// sb.eSrv.AddEvent(sb.topic, )
+	if err := sb.sSrv.Run(ctx); err != nil {
+		return SBusErr{sb.id, "cannot run a Service Server", err}
+	}
+
+	sb.Lock()
+	sb.runned = true
+	sb.Unlock()
+
+	go func() {
+		<-ctx.Done()
+		sb.Lock()
+		sb.runned = false
+		sb.Unlock()
+	}()
 
 	return nil
 }
