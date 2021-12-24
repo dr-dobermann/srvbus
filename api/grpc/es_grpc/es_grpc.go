@@ -23,6 +23,7 @@ const (
 
 var UseHostLogger *zap.SugaredLogger
 
+// EvtServer is a gRPC cover for the es.EventServer.
 type EvtServer struct {
 	sync.Mutex
 
@@ -34,8 +35,13 @@ type EvtServer struct {
 	ctx context.Context
 
 	runned bool
+
+	// subsStreams is used to register and stops the subscription streams.
+	// the data as foolow [subscriber_id][subs_stream_id]contex_cancelfunction
+	subsStreams map[uuid.UUID]map[uuid.UUID]context.CancelFunc
 }
 
+// creates new event server
 func New(eSrv *es.EventServer, log *zap.SugaredLogger) (*EvtServer, error) {
 	if eSrv == nil {
 		return nil, errs.ErrGrpcNoHost
@@ -46,11 +52,13 @@ func New(eSrv *es.EventServer, log *zap.SugaredLogger) (*EvtServer, error) {
 	}
 
 	return &EvtServer{
-			srv: eSrv,
-			log: log},
+			srv:         eSrv,
+			log:         log,
+			subsStreams: make(map[uuid.UUID]map[uuid.UUID]context.CancelFunc)},
 		nil
 }
 
+// runs a gRPC server for Event Server
 func (eSrv *EvtServer) Run(
 	ctx context.Context,
 	host, port string,
@@ -70,6 +78,7 @@ func (eSrv *EvtServer) Run(
 
 	eSrv.Lock()
 	eSrv.runned = true
+	eSrv.ctx = ctx
 	eSrv.Unlock()
 
 	// start delayed context cancel listener to stop
@@ -78,6 +87,15 @@ func (eSrv *EvtServer) Run(
 		eSrv.log.Debug("server context stopper started...")
 
 		<-ctx.Done()
+
+		// cancel all existed subscription streams
+		// context function should be called according to the
+		// documentation to free context resources
+		for _, ss := range eSrv.subsStreams {
+			for _, cancel := range ss {
+				cancel()
+			}
+		}
 
 		eSrv.log.Debug("context cancelled")
 
@@ -376,16 +394,61 @@ func (eSrv *EvtServer) Subscribe(
 		return fmt.Errorf("invalid sender ID: %v", err)
 	}
 
+	streamID, err := uuid.Parse(strings.Trim(in.GetSubsStreamId(), " "))
+	if err != nil {
+		return fmt.Errorf("couldn't get stream ID: %v", err)
+	}
+
+	// register events subscritpion stream cancel function
+	if !eSrv.checkSubsStream(subscriberID, streamID, true) {
+		return fmt.Errorf(
+			"stream [%v] already registered for the sibscriber [%v]",
+			streamID, subscriberID)
+	}
+
+	strCtx, strCancel := context.WithCancel(eSrv.ctx)
+
+	eSrv.Lock()
+	if _, ok := eSrv.subsStreams[subscriberID]; !ok {
+		eSrv.subsStreams[subscriberID] = make(map[uuid.UUID]context.CancelFunc)
+	}
+	eSrv.subsStreams[subscriberID][streamID] = strCancel
+	eSrv.Unlock()
+
 	// register subscriptions on the host server
 	evtChan := make(chan es.EventEnvelope)
 	eSrv.subscribe(in, evtChan, subscriberID)
 
 	// start sending events stream from subscriptions
-	return eSrv.sendEvents(eSrv.ctx, evtChan, srvID, stream)
+	err = eSrv.sendEvents(strCtx, evtChan, srvID, stream)
+
+	// remove stream cancel function
+	eSrv.Lock()
+
+	// cancel context if it still active to free context resources
+	if strCtx.Err() == nil {
+		strCancel()
+	}
+
+	delete(eSrv.subsStreams[subscriberID], streamID)
+
+	close(evtChan)
+
+	if len(eSrv.subsStreams[subscriberID]) == 0 {
+		delete(eSrv.subsStreams, subscriberID)
+	}
+
+	eSrv.Unlock()
+
+	if err != nil {
+		return fmt.Errorf("event streaming error: %v", err)
+	}
+
+	return nil
 }
 
 // sends channelled events.
-func (*EvtServer) sendEvents(
+func (eSrv *EvtServer) sendEvents(
 	ctx context.Context,
 	evtChan chan es.EventEnvelope,
 	srvID uuid.UUID,
@@ -397,7 +460,7 @@ func (*EvtServer) sendEvents(
 			return ctx.Err()
 
 		case ee := <-evtChan:
-			di := ee.What().DataItem
+			evt := ee.What()
 
 			env := pb.EventEnvelope{
 				ServerId: srvID.String(),
@@ -405,9 +468,9 @@ func (*EvtServer) sendEvents(
 				SenderId: ee.Publisher.String(),
 				RegAt:    ee.RegAt.String(),
 				Event: &pb.Event{
-					EvtName:    ee.What().Name,
-					EvtDetails: string(di.Data()),
-					Timestamp:  ee.What().At.Unix()}}
+					EvtName:    evt.Name,
+					EvtDetails: string(evt.Data()),
+					Timestamp:  evt.At.Unix()}}
 
 			if err := stream.Send(&env); err != nil {
 				return fmt.Errorf(
@@ -521,4 +584,98 @@ func (eSrv *EvtServer) UnSubscribe(
 			Result:   pb.OpResponse_OK,
 		},
 		nil
+}
+
+// stops event streaming service of subscription events.
+// UnSubscribe only stops sending events into the channel, but not
+// stops the streaming service.
+func (eSrv *EvtServer) StopSubscriptionStream(
+	ctx context.Context, in *pb.StopStreamRequest) (*pb.OpResponse, error) {
+
+	var err error
+
+	// log results of the function call
+	defer func() {
+		if err != nil {
+			eSrv.log.Warnw("streaming stopping failed",
+				zap.String("subs_stream_id", in.SubsStreamId),
+				zap.Error(err))
+
+			return
+		}
+
+		eSrv.log.Debug("streaming stopped",
+			zap.String("subs_stream_id", in.GetSubsStreamId()))
+	}()
+
+	if !eSrv.IsRunned() {
+		return nil, errs.ErrNotRunned
+	}
+
+	srvID, err := eSrv.checkServerID(in.GetServerId())
+	if err != nil {
+		return nil, fmt.Errorf("invalid server ID: %v", err)
+	}
+
+	subscriberID, err := uuid.Parse(strings.Trim(in.GetSubscriberId(), " "))
+	if err != nil {
+		return nil, fmt.Errorf("invalid sender ID: %v", err)
+	}
+
+	streamID, err := uuid.Parse(strings.Trim(in.GetSubsStreamId(), " "))
+	if err != nil {
+		return nil, fmt.Errorf("invalid subscription stream id: %v",
+			in.SubsStreamId)
+	}
+
+	if !eSrv.checkSubsStream(subscriberID, streamID, false) {
+		return nil,
+			fmt.Errorf("subscription id [%v] isn't found on the server",
+				streamID)
+	}
+
+	cancel, ok := eSrv.subsStreams[subscriberID][streamID]
+	if !ok {
+		return nil,
+			fmt.Errorf("checkSubsStream error. "+
+				"Stream [%v] cancelFunc doesn't existed for subscriber [%b]",
+				streamID, subscriberID)
+	}
+
+	cancel()
+
+	return &pb.OpResponse{
+			ServerId: srvID.String(),
+			Result:   pb.OpResponse_OK},
+		nil
+}
+
+// checks if the subscriber has active subscription streamID.
+// if getNew is empty
+func (eSrv *EvtServer) checkSubsStream(subscriberID uuid.UUID,
+	streamID uuid.UUID, getNew bool) bool {
+
+	eSrv.Lock()
+	defer eSrv.Unlock()
+
+	ss, ok := eSrv.subsStreams[subscriberID]
+	if !ok {
+		if !getNew {
+			return false
+		}
+
+		ss = make(map[uuid.UUID]context.CancelFunc)
+		eSrv.subsStreams[subscriberID] = ss
+	}
+
+	_, ok = ss[streamID]
+	if !ok && !getNew { // cancelFunc should be registered
+		return false
+	}
+
+	if ok && getNew { // cancelFunc shouldn't be registered for a new streamID
+		return false
+	}
+
+	return true
 }

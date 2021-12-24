@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/dr-dobermann/srvbus/es"
 	pb "github.com/dr-dobermann/srvbus/proto/gen/es_proto"
@@ -44,6 +45,8 @@ func main() {
 
 	subscriberID := uuid.New()
 
+	streamID := uuid.New()
+
 	events, err := client.Subscribe(ctx, &pb.SubscriptionRequest{
 		ServerId:     *srvID,
 		SubscriberId: subscriberID.String(),
@@ -57,6 +60,26 @@ func main() {
 					{Value: evtName, Type: pb.Filter_HAS_NAME}},
 			},
 		},
+		SubsStreamId: streamID.String(),
+	})
+	if err != nil {
+		fmt.Println("couldn't open an stream:", err)
+		return
+	}
+
+	time.AfterFunc(5*time.Second, func() {
+		_, err := client.StopSubscriptionStream(ctx, &pb.StopStreamRequest{
+			ServerId:     *srvID,
+			SubscriberId: subscriberID.String(),
+			SubsStreamId: streamID.String(),
+		})
+
+		if err != nil {
+			fmt.Println("error while stopping stream:", err)
+			return
+		}
+
+		fmt.Println("event streamer stopped")
 	})
 
 	for {

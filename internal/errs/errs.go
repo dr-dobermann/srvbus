@@ -1,19 +1,19 @@
 package errs
 
-import "fmt"
+import "errors"
 
 var (
-	ErrGrpcNoHost    = fmt.Errorf("host server isn't set")
-	ErrNotRunned     = fmt.Errorf("server isn't runned")
-	ErrAlreadyRunned = fmt.Errorf("already runned")
+	ErrGrpcNoHost    = errors.New("host server isn't set")
+	ErrNotRunned     = errors.New("server isn't runned")
+	ErrAlreadyRunned = errors.New("already runned")
 
-	ErrEmptyQueueName = fmt.Errorf("queue name is empty")
-	ErrNoSender       = fmt.Errorf("sender is not set")
-	ErrEmptyMessage   = fmt.Errorf("messages is empty")
+	ErrEmptyQueueName = errors.New("queue name is empty")
+	ErrNoSender       = errors.New("sender is not set")
+	ErrEmptyMessage   = errors.New("messages is empty")
 
-	ErrNoService = fmt.Errorf("couldn't register a nil-service")
+	ErrNoService = errors.New("couldn't register a nil-service")
 
-	ErrNoLogger = fmt.Errorf("logger isn't present")
+	ErrNoLogger = errors.New("logger isn't present")
 
-	ErrNotImplementedYet = fmt.Errorf("not implemented yet")
+	ErrNotImplementedYet = errors.New("not implemented yet")
 )

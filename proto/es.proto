@@ -26,6 +26,11 @@ service EventService {
 
     // cancels subsciptions for one or many topics on the host server.
     rpc UnSubscribe(UnsubsibeRequest) returns (OpResponse) {}
+
+    // stops event streaming service of subscription events.
+    // UnSubscribe only stops sending events into the channel, but not
+    // stops the streaming service.
+    rpc StopSubscriptionStream(StopStreamRequest) returns (OpResponse) {}
 }
 
 message TopicRequest {
@@ -109,6 +114,11 @@ message SubscriptionRequest {
 
     // subscription list
     repeated Subscription subscriptions     = 3;
+
+    // ID of the subscription stream.
+    // By using this id streaming service could 
+    // be stopped in StopSubscriptionStream call.
+    string subs_stream_id                   = 4;
 }
 
 message Subscription {
@@ -130,11 +140,13 @@ message Subscription {
 
 message Filter {
     string value                    = 1;
+
     enum FilterType {
         HAS_NAME    = 0;  // exact event name equality
         IN_NAME     = 1;  // event name has a given substring
         IN_DESCR    = 2;  // event description has a given substring
     }
+    
     FilterType type                 = 2; 
 }
 
@@ -164,4 +176,15 @@ message UnsubsibeRequest {
 
     // topics to unsubscribe from
     repeated string topics          = 3;
+}
+
+message StopStreamRequest {
+    // host server id
+    string server_id                = 1;
+
+    // subscriber id
+    string subscriber_id            = 2;
+
+    // subscription stream id
+    string subs_stream_id           = 3;
 }
