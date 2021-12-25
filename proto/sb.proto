@@ -12,10 +12,19 @@ service SrvBus {
     // 
     // if returned nil uuid, then there is no particular message server
     // or there is no runned message server on the bus
-    rpc GetMsgServer( Server ) returns ( Server ) {}
+    rpc GetMessageServer( ServerRequest ) returns ( ServerResponse ) {}
+
+    rpc GetEventServer( ServerRequest ) returns ( ServerResponse ) {}
+
+    rpc GetServiceServer( ServerRequest ) returns ( ServerResponse ) {}
 }
 
-message Server {
+message ServerRequest {
     string server_id        = 1;
 }
 
+message ServerResponse {
+    string server_id        = 1;
+    string host             = 2;
+    int32  port             = 3;
+}

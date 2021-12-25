@@ -32,6 +32,8 @@ const (
 	srvNew   = "NEW_MSERVER_EVT"
 	srvStart = "MSERVER_START_EVT"
 	srvEnd   = "MSERVER_END_EVT"
+
+	defaultTopicName = "/mserver"
 )
 
 /// MessageServer holds all the Message Server data.
@@ -55,7 +57,11 @@ type MessageServer struct {
 // emits single event into the personal message server topic
 // if the Event Server was given on New call.
 func (mSrv *MessageServer) EmitEvent(name, descr string) {
-	if mSrv.eSrv == nil {
+	if mSrv.eSrv == nil || !mSrv.eSrv.IsRunned() {
+		mSrv.log.Warnw("couldn't register event on non-runned or "+
+			"empty event server",
+			zap.String("name", name))
+
 		return
 	}
 
@@ -67,36 +73,20 @@ func (mSrv *MessageServer) EmitEvent(name, descr string) {
 
 	// initialize default server topic if needed
 	if mSrv.esTopic == "" {
-		topic := "/mserver/" + mSrv.id.String()
-		if err := mSrv.eSrv.AddTopicQueue(topic, "/"); err != nil {
+		topic := defaultTopicName + "/" + mSrv.id.String()
+		if err := mSrv.eSrv.AddTopicQueue(topic, es.RootTopic); err != nil {
 			mSrv.log.Warnw("couldn't add topic to Event Server",
-				"eSrvName", mSrv.eSrv.Name,
-				"eSrvID", mSrv.eSrv.ID,
-				"topic", topic,
-				"err", err)
+				zap.String("eSrvName", mSrv.eSrv.Name),
+				zap.Stringer("eSrvID", mSrv.eSrv.ID),
+				zap.String("topic", topic),
+				zap.Error(err))
+
 			return
 		}
 		mSrv.esTopic = topic
 	}
 
-	evt, err := es.NewEventWithString(name, descr)
-	if err != nil {
-		mSrv.log.Warnw("couldn't create an event",
-			"eSrvName", mSrv.eSrv.Name,
-			"eSrvID", mSrv.eSrv.ID,
-			"evt_name", name,
-			"err", err)
-		return
-	}
-
-	if err := mSrv.eSrv.AddEvent(mSrv.esTopic, evt, mSrv.id); err != nil {
-		mSrv.log.Warnw("couldn't register an event",
-			"eSrvName", mSrv.eSrv.Name,
-			"eSrvID", mSrv.eSrv.ID,
-			"evt_name", name,
-			"err", err)
-		return
-	}
+	es.EmitEvt(mSrv.eSrv, mSrv.esTopic, name, descr, mSrv.id)
 }
 
 // returns ID of the server
@@ -375,5 +365,4 @@ func (mSrv *MessageServer) WaitForQueue(
 	}()
 
 	return wCh, nil
-
 }

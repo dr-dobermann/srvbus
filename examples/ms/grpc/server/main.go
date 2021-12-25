@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/dr-dobermann/srvbus/api/grpc/ms_grpc"
+	"github.com/dr-dobermann/srvbus/api/grpc/msgrpc"
 	"github.com/dr-dobermann/srvbus/es"
 	"github.com/dr-dobermann/srvbus/ms"
 	"github.com/google/uuid"
@@ -103,7 +103,7 @@ func main() {
 	})
 
 	// run gRPC server
-	msGRPC, err := ms_grpc.New(mSrv, log.Sugar())
+	msGRPC, err := msgrpc.New(mSrv, log.Sugar())
 	if err != nil {
 		log.Sugar().Fatal("couldn't create a gRPC server:", err)
 	}

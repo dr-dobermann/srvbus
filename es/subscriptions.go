@@ -84,7 +84,10 @@ type subscription struct {
 // there are two way of event sending:
 //   the first one used if the subscription has filters
 //     and subscriber gets only events which comply those filters'
-//     conditions
+//     conditions.
+//
+//     FILTERS DON'T SUPPORT SEQUENTAL EVENT SENDING.
+//
 //   the second way is the sequental sending of all events
 //     putting into the topic
 func (s *subscription) sendEvent(ctx context.Context,

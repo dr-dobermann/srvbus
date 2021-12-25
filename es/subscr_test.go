@@ -123,7 +123,7 @@ func TestSubscriptions(t *testing.T) {
 	is.Equal(len(validEvents), 0)
 	m.Unlock()
 
-	for _, ti := range eSrv.Statistics() {
+	for _, ti := range eSrv.RootTopicsInfo() {
 		fmt.Println(ti.String())
 	}
 

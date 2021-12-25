@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dr-dobermann/srvbus/api/grpc/es_grpc"
+	"github.com/dr-dobermann/srvbus/api/grpc/esgrpc"
 	"github.com/dr-dobermann/srvbus/es"
 	"github.com/dr-dobermann/srvbus/internal/errs"
 	"github.com/google/uuid"
@@ -56,7 +56,7 @@ func main() {
 		panic(err.Error())
 	}
 
-	gES, err := es_grpc.New(eSrv, es_grpc.UseHostLogger)
+	gES, err := esgrpc.New(eSrv, esgrpc.UseHostLogger)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -74,7 +74,7 @@ func main() {
 
 	err = <-runCh
 	if err != nil {
-		panic(err.Error())
+		fmt.Println(err.Error())
 	}
 
 }

@@ -13,6 +13,13 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	sbusStart = "SBUS_START_EVT"
+	sbusEnd   = "SBUS_END_EVT"
+
+	defaultTopic = "/sbus"
+)
+
 type SBusErr struct {
 	sbID uuid.UUID
 	msg  string
@@ -20,7 +27,7 @@ type SBusErr struct {
 }
 
 func (sbErr SBusErr) Error() string {
-	return fmt.Sprintf("SBErr[%v] %s: %w", sbErr.sbID, sbErr.msg, sbErr.Err)
+	return fmt.Sprintf("SBErr[%v] %s: %v", sbErr.sbID, sbErr.msg, sbErr.Err)
 }
 
 type ServiceBus struct {
@@ -36,9 +43,40 @@ type ServiceBus struct {
 	mSrv *ms.MessageServer
 	sSrv *s2.ServiceServer
 
-	topic string
-
 	runned bool
+
+	esTopic string
+}
+
+func (sb *ServiceBus) Logger() *zap.SugaredLogger {
+	return sb.log
+}
+
+// emits single event into the internal event server topic
+// if the Event Server was given on New call.
+func (sb *ServiceBus) EmitEvent(name, descr string) {
+	if sb.eSrv == nil {
+		return
+	}
+
+	if descr == "" {
+		descr = fmt.Sprintf("{sbus_id: \"%v\"}", sb.id)
+	}
+
+	// initialize default server topic if needed
+	if sb.esTopic == "" {
+		topic := defaultTopic + "/" + sb.id.String()
+		if err := sb.eSrv.AddTopicQueue(topic, es.RootTopic); err != nil {
+			sb.log.Warnw("couldn't add topic to Event Server",
+				zap.String("sbus_id", sb.id.String()),
+				zap.String("topic", topic),
+				zap.Error(err))
+			return
+		}
+		sb.esTopic = topic
+	}
+
+	es.EmitEvt(sb.eSrv, sb.esTopic, name, descr, sb.id)
 }
 
 func (sb *ServiceBus) ID() uuid.UUID {
@@ -67,7 +105,7 @@ func New(id uuid.UUID, log *zap.SugaredLogger) (*ServiceBus, error) {
 
 	sb := &ServiceBus{
 		id:  id,
-		log: log.Named("SB:  " + id.String()),
+		log: log.Named("SB [" + id.String() + "]"),
 	}
 
 	var err error
@@ -100,7 +138,7 @@ func (sb *ServiceBus) Run(ctx context.Context) error {
 	sb.ctx = ctx
 
 	// run event server first so all others could emit events
-	// just on time they runned
+	// just on the time they runned
 	if sb.eSrv == nil {
 		return SBusErr{sb.id, "Event Server is absent", nil}
 	}
@@ -131,12 +169,53 @@ func (sb *ServiceBus) Run(ctx context.Context) error {
 	sb.runned = true
 	sb.Unlock()
 
+	sb.EmitEvent(sbusStart, "")
+
 	go func() {
 		<-ctx.Done()
+
 		sb.Lock()
 		sb.runned = false
 		sb.Unlock()
+
+		sb.EmitEvent(sbusEnd, "")
 	}()
 
 	return nil
+}
+
+func (sb *ServiceBus) GetEventServer() (*es.EventServer, error) {
+	if !sb.IsRunned() {
+		return nil, errs.ErrNotRunned
+	}
+
+	if sb.eSrv == nil {
+		return nil, SBusErr{sb.id, "Event Server is absent", nil}
+	}
+
+	return sb.eSrv, nil
+}
+
+func (sb *ServiceBus) GetMessageServer() (*ms.MessageServer, error) {
+	if !sb.IsRunned() {
+		return nil, errs.ErrNotRunned
+	}
+
+	if sb.mSrv == nil {
+		return nil, SBusErr{sb.id, "Message Server is absent", nil}
+	}
+
+	return sb.mSrv, nil
+}
+
+func (sb *ServiceBus) GetServiceServer() (*s2.ServiceServer, error) {
+	if !sb.IsRunned() {
+		return nil, errs.ErrNotRunned
+	}
+
+	if sb.sSrv == nil {
+		return nil, SBusErr{sb.id, "Service Server is absent", nil}
+	}
+
+	return sb.sSrv, nil
 }

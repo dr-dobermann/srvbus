@@ -1,4 +1,4 @@
-package es_grpc
+package esgrpc
 
 import (
 	"context"
@@ -102,19 +102,10 @@ func (eSrv *EvtServer) Run(
 		grpcServer.Stop()
 	})
 
-	srvDescr := fmt.Sprintf("{name: \"\", id: \"\"}",
+	srvDescr := fmt.Sprintf("{name: \"%s\", id: \"%v\"}",
 		eSrv.srv.Name, eSrv.srv.ID)
 
-	topic := "/server"
-
-	err = eSrv.srv.AddEvent(topic,
-		es.MustEvent(es.NewEventWithString(srvStart, srvDescr)),
-		eSrv.srv.ID)
-	if err != nil {
-		eSrv.log.Warnw("couldn't add an event",
-			zap.String("topic", topic),
-			zap.Error(err))
-	}
+	eSrv.srv.EmitEvent(srvStart, srvDescr)
 
 	// run grpc server
 	eSrv.log.Infow("grpc server started",
@@ -130,14 +121,7 @@ func (eSrv *EvtServer) Run(
 	eSrv.runned = false
 	eSrv.Unlock()
 
-	err = eSrv.srv.AddEvent(topic,
-		es.MustEvent(es.NewEventWithString(srvEnd, srvDescr)),
-		eSrv.srv.ID)
-	if err != nil {
-		eSrv.log.Warnw("couldn't add an event",
-			zap.String("topic", topic),
-			zap.Error(err))
-	}
+	eSrv.srv.EmitEvent(srvEnd, srvDescr)
 
 	eSrv.log.Info("grpc server stopped")
 

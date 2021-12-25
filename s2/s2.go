@@ -37,6 +37,8 @@ const (
 
 	svcStart = "SERVICE_START_EVT"
 	svcEnd   = "SERVICE_END_EVT"
+
+	defaultTopic = "/s2"
 )
 
 // =============================================================================
@@ -132,28 +134,31 @@ func (sSrv *ServiceServer) IsRunned() bool {
 	return sSrv.runned
 }
 
-// emits single event into the personal message server topic
+// emits single event into the internal event server topic
 // if the Event Server was given on New call.
 func (sSrv *ServiceServer) emitEvent(name, descr string) {
-	if sSrv.eSrv == nil {
+	if sSrv.eSrv == nil || !sSrv.eSrv.IsRunned() {
+		sSrv.log.Warnw("couldn't register event on non-runned event server",
+			zap.String("name", name))
+
 		return
 	}
 
 	// initialize default server topic if needed
 	if sSrv.esTopic == "" {
-		topic := "/s2/" + sSrv.ID.String()
-		if err := sSrv.eSrv.AddTopicQueue(topic, "/"); err != nil {
+		topic := defaultTopic + "/" + sSrv.ID.String()
+		if err := sSrv.eSrv.AddTopicQueue(topic, es.RootTopic); err != nil {
 			sSrv.log.Warnw("couldn't add topic to Event Server",
-				"eSrvName", sSrv.eSrv.Name,
-				"eSrvID", sSrv.eSrv.ID,
-				"topic", topic,
-				"err", err)
+				zap.String("eSrvName", sSrv.eSrv.Name),
+				zap.Stringer("eSrvID", sSrv.eSrv.ID),
+				zap.String("topic", topic),
+				zap.Error(err))
 			return
 		}
 		sSrv.esTopic = topic
 	}
 
-	es.EmitEvent(sSrv.eSrv, sSrv.esTopic, name, descr, sSrv.ID)
+	es.EmitEvt(sSrv.eSrv, sSrv.esTopic, name, descr, sSrv.ID)
 }
 
 // New creates a new ServiceServer and returns its pointer.
@@ -178,8 +183,8 @@ func New(
 	sSrv := new(ServiceServer)
 	sSrv.ID = id
 	sSrv.Name = name
-	sSrv.log = log.Named("S2: " + sSrv.Name +
-		" #" + sSrv.ID.String())
+	sSrv.log = log.Named("S2 [" + sSrv.Name +
+		"] #" + sSrv.ID.String())
 	sSrv.services = make(map[uuid.UUID]*serviceRecord)
 	sSrv.eSrv = eSrv
 
@@ -216,7 +221,7 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 
 			if !ok {
 				sSrv.log.Warnw("service not found",
-					"svc ID", id)
+					zap.Stringer("svc_id", id))
 
 				continue
 			}
@@ -242,8 +247,8 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 					sr.setState(SSFailed, err)
 
 					sSrv.log.Infow("service failed",
-						"svc ID", id,
-						"err", err)
+						zap.Stringer("svc_id", id),
+						zap.Error(err))
 
 					return
 				}
@@ -256,7 +261,7 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 						sr.name, sr.id, sr.state, sr.state.String()))
 
 				sSrv.log.Infow("service ended",
-					"svc ID", id)
+					zap.Stringer("svc_id", id))
 			}()
 		}
 	}
@@ -323,8 +328,8 @@ func (sSrv *ServiceServer) AddService(
 			sr.name, sr.id))
 
 	sSrv.log.Debugw("new service registered",
-		"svc ID", id,
-		"name", name)
+		zap.Stringer("svc_id", id),
+		zap.String("name", name))
 
 	if startImmediately {
 		if err := sSrv.ExecService(id); err != nil {
@@ -351,7 +356,7 @@ func (sSrv *ServiceServer) ExecService(
 
 	if !ok {
 		sSrv.log.Errorw("service isn't found",
-			"svc ID", id)
+			zap.Stringer("svc_id", id))
 
 		return fmt.Errorf("couldn't find service # %v", id)
 	}
@@ -359,8 +364,8 @@ func (sSrv *ServiceServer) ExecService(
 	srSt := sr.getState()
 	if srSt != SSRegistered {
 		sSrv.log.Errorw("invalid service state for running",
-			"svc ID", id,
-			"state", srSt.String())
+			zap.Stringer("svc_id", id),
+			zap.Stringer("state", srSt))
 
 		return fmt.Errorf("invalid %s service state state %s for running",
 			id.String(), srSt.String())
@@ -400,7 +405,7 @@ func (sSrv *ServiceServer) StopService(id uuid.UUID) error {
 	if sr.stopChannel != nil {
 		go func() {
 			sSrv.log.Debugw("stopping service...",
-				"svc ID", id)
+				zap.Stringer("svc_id", id))
 			select {
 			case <-sSrv.ctx.Done():
 			case sr.stopChannel <- struct{}{}:
@@ -451,7 +456,7 @@ func (sSrv *ServiceServer) WaitForService(
 	id uuid.UUID) (chan bool, error) {
 
 	sSrv.log.Debugw("wait for service",
-		"svc ID", id)
+		zap.Stringer("svc_id", id))
 
 	// wait for a single service
 	if id != uuid.Nil {
@@ -461,7 +466,7 @@ func (sSrv *ServiceServer) WaitForService(
 
 		if !ok {
 			sSrv.log.Errorw("service isn't found for wait",
-				"service ID", id)
+				zap.Stringer("svc_id", id))
 
 			return nil, fmt.Errorf("couldn't find service %s", id.String())
 		}

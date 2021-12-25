@@ -2,6 +2,7 @@ package srvbus
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -30,4 +31,23 @@ func TestSBStart(t *testing.T) {
 	// run srvbus
 	is.NoErr(sb.Run(ctx))
 	is.True(sb.IsRunned())
+
+	eSrv, err := sb.GetEventServer()
+	is.NoErr(err)
+	is.True(eSrv != nil)
+	is.True(eSrv.IsRunned())
+
+	mSrv, err := sb.GetMessageServer()
+	is.NoErr(err)
+	is.True(mSrv != nil)
+	is.True(mSrv.IsRunned())
+
+	sSrv, err := sb.GetServiceServer()
+	is.NoErr(err)
+	is.True(sSrv != nil)
+	is.True(sSrv.IsRunned())
+
+	for _, ti := range eSrv.RootTopicsInfo() {
+		fmt.Println(ti.String())
+	}
 }

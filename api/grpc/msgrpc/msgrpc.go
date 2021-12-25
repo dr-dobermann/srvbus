@@ -1,4 +1,4 @@
-package ms_grpc
+package msgrpc
 
 import (
 	"bytes"

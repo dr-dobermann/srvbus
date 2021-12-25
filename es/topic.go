@@ -144,7 +144,7 @@ func (t *Topic) addSubtopic(name string, base []string) error {
 		}
 
 		t.log.Debugw("subtopic added",
-			"subtopic", name)
+			zap.String("subtopic", name))
 
 		return nil
 	}
@@ -199,7 +199,7 @@ func (t *Topic) removeSubtopics(topic string, recursive bool) error {
 		t.Unlock()
 
 		t.log.Debugw("subtopic deleted",
-			"topic", st.name)
+			zap.String("topic", st.name))
 	}
 
 	return nil
@@ -276,7 +276,7 @@ func (t *Topic) processTopic(ctx context.Context) {
 		case ee := <-t.inCh:
 			if err := ee.check(); err != nil {
 				t.log.Warnw("invalid envelope",
-					"err", err.Error())
+					zap.Error(err))
 
 				continue
 			}
@@ -290,7 +290,7 @@ func (t *Topic) processTopic(ctx context.Context) {
 			t.Unlock()
 
 			t.log.Debugw("new event registered",
-				"evtName", ee.event.Name)
+				zap.String("evtName", ee.event.Name))
 
 			go t.updateSubs(ctx, &ee, pos)
 
@@ -322,11 +322,6 @@ func (t *Topic) updateSubs(ctx context.Context, ee *EventEnvelope, pos int) {
 }
 
 // creating single subscritpition from the subscription request sr.
-//
-// subscribe doesn't check the subscription request sr, so
-//
-//   'DO NOT CALL IT DIRECTLY WITH INVALID REQUEST !!!
-//
 func (t *Topic) subscribe(subscriber uuid.UUID, sr SubscrReq) error {
 	if !t.isRunned() {
 		return newESErr(t.eServer, nil, "cannot subscribe on stopped topic")
@@ -349,10 +344,10 @@ func (t *Topic) subscribe(subscriber uuid.UUID, sr SubscrReq) error {
 	t.subs[subscriber] = s
 
 	t.log.Debugw("subscription added",
-		"subscriber", subscriber,
-		"sub request", sr.Topic,
-		"recursive", sr.Recursive,
-		"rec_depth", sr.Depth)
+		zap.Stringer("subscriber", subscriber),
+		zap.String("sub_request", sr.Topic),
+		zap.Bool("recursive", sr.Recursive),
+		zap.Uint("rec_depth", sr.Depth))
 
 	go t.startSub(ns, sr.StartPos)
 
@@ -396,7 +391,7 @@ func (t *Topic) unsubscribe(subscriber uuid.UUID) error {
 	delete(t.subs, subscriber)
 
 	t.log.Debugw("subscription cancelled",
-		"subscriber", subscriber)
+		zap.Stringer("subscriber", subscriber))
 
 	return nil
 }

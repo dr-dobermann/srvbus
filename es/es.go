@@ -95,7 +95,14 @@ type EventServer struct {
 
 // emits single event into the personal message server topic
 // if the Event Server was given on New call.
-func (eSrv *EventServer) emitEvent(name, descr string) {
+func (eSrv *EventServer) EmitEvent(name, descr string) {
+
+	if !eSrv.IsRunned() {
+		eSrv.log.Warnw("couldn't register event on non-runned server",
+			zap.String("name", name))
+
+		return
+	}
 
 	// initialize default server topic if needed
 	if eSrv.esTopic == "" {
@@ -110,7 +117,7 @@ func (eSrv *EventServer) emitEvent(name, descr string) {
 		eSrv.esTopic = topic
 	}
 
-	EmitEvent(eSrv, eSrv.esTopic, name, descr, eSrv.ID)
+	EmitEvt(eSrv, eSrv.esTopic, name, descr, eSrv.ID)
 }
 
 // Logger returns a pointer to the internal logger of
@@ -259,14 +266,14 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 		eSrv.Unlock()
 
 		eSrv.log.Debugw("topic added to root",
-			"topic", name)
+			zap.String("topic", name))
 
 		// if server is runned, run the topic too
 		if eSrv.IsRunned() {
 			nt.run(eSrv.ctx)
 		}
 
-		eSrv.emitEvent(topicNew, "{topic: "+name+"}")
+		eSrv.EmitEvent(topicNew, "{topic: "+name+"}")
 
 		return nil
 	}
@@ -290,7 +297,7 @@ func (eSrv *EventServer) AddTopic(name string, branch string) error {
 			"couldn't add subtopic '%s' topic to '%s'", name, branch)
 	}
 
-	eSrv.emitEvent(topicNew, "{topic: "+name+"}")
+	eSrv.EmitEvent(topicNew, "{topic: "+name+"}")
 
 	return nil
 }
@@ -356,9 +363,9 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 		eSrv.Unlock()
 
 		eSrv.log.Debugw("root topic deleted",
-			"topic", topic)
+			zap.String("topic", topic))
 
-		eSrv.emitEvent(topicDel, topic)
+		eSrv.EmitEvent(topicDel, topic)
 
 		return nil
 	}
@@ -382,9 +389,9 @@ func (eSrv *EventServer) RemoveTopic(topic string, recursive bool) error {
 	}
 
 	eSrv.log.Debugw("topic deleted",
-		"topic", topic)
+		zap.String("topic", topic))
 
-	eSrv.emitEvent(topicDel, "{topic: "+topic+"}")
+	eSrv.EmitEvent(topicDel, "{topic: "+topic+"}")
 
 	return nil
 }
@@ -462,7 +469,7 @@ func (eSrv *EventServer) Subscribe(
 			return newESErr(eSrv, err, "subscription #%d failed", i)
 		}
 
-		eSrv.emitEvent(subsNew,
+		eSrv.EmitEvent(subsNew,
 			fmt.Sprintf("{subscriber_id: \"%v\", topic: \"%s\"}",
 				subscriber, s.Topic))
 	}
@@ -499,7 +506,7 @@ func (eSrv *EventServer) UnSubscribe(
 				"unsubscription form topic %s failed", s)
 		}
 
-		eSrv.emitEvent(subsDel,
+		eSrv.EmitEvent(subsDel,
 			fmt.Sprintf("{subscriber_id: \"%v\", topic: \"%s\"",
 				subscriber, s))
 	}
@@ -549,7 +556,7 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 	}
 
 	eSrv.log.Infow("event server is starting...",
-		"cleanStart", cleanStart)
+		zap.Bool("cleanStart", cleanStart))
 
 	// create new topics table or clean it if needed
 	if cleanStart {
@@ -563,12 +570,15 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 		eSrv.Unlock()
 
 		eSrv.log.Infow("event server stopped",
-			"err", ctx.Err())
+			zap.Error(ctx.Err()))
 
 	}()
 
 	eSrv.ctx = ctx
 	eSrv.runned = true
+	eSrv.esTopic = defaultTopic
+
+	eSrv.log.Info("event server started")
 
 	// add server's default topic
 	if err := eSrv.AddTopic(defaultTopic, "/"); err != nil {
@@ -577,8 +587,6 @@ func (eSrv *EventServer) Run(ctx context.Context, cleanStart bool) error {
 			err,
 			"couldn't add default topic '%s'", defaultTopic)
 	}
-
-	eSrv.log.Info("event server started")
 
 	return nil
 }
@@ -595,8 +603,9 @@ type TopicInfo struct {
 	Subscribers []uuid.UUID
 }
 
-// Statistics returns Event Server statistics
-func (eSrv *EventServer) Statistics() []TopicInfo {
+// returns a list of EventServer's root topics. Every root topics consists of
+// underlayed branches and subscriber's lists.
+func (eSrv *EventServer) RootTopicsInfo() []TopicInfo {
 	res := []TopicInfo{}
 	eSrv.Lock()
 	defer eSrv.Unlock()
@@ -623,12 +632,12 @@ func (ti TopicInfo) String() string {
 
 // =============================================================================
 // emits single event into the selected topic.
-func EmitEvent(
+func EmitEvt(
 	eSrv *EventServer,
 	topic, name, descr string,
 	senderID uuid.UUID) {
 
-	if eSrv == nil {
+	if eSrv == nil || !eSrv.IsRunned() {
 		return
 	}
 

@@ -18,11 +18,16 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SrvBusClient interface {
-	// checks if there is a MessageServer with given ID
-	// or askы for available MessageServer (if id in request
+	// checks if given server is present of service bus or
+	// asks for available MessageServer (if id in request
 	// is uuid.Nil 00000000-0000-0000-0000-000000000000
 	// or just nil).
-	GetMsgServer(ctx context.Context, in *Server, opts ...grpc.CallOption) (*Server, error)
+	//
+	// if returned nil uuid, then there is no particular message server
+	// or there is no runned message server on the bus
+	GetMessageServer(ctx context.Context, in *ServerRequest, opts ...grpc.CallOption) (*ServerResponse, error)
+	GetEventServer(ctx context.Context, in *ServerRequest, opts ...grpc.CallOption) (*ServerResponse, error)
+	GetServiceServer(ctx context.Context, in *ServerRequest, opts ...grpc.CallOption) (*ServerResponse, error)
 }
 
 type srvBusClient struct {
@@ -33,9 +38,27 @@ func NewSrvBusClient(cc grpc.ClientConnInterface) SrvBusClient {
 	return &srvBusClient{cc}
 }
 
-func (c *srvBusClient) GetMsgServer(ctx context.Context, in *Server, opts ...grpc.CallOption) (*Server, error) {
-	out := new(Server)
-	err := c.cc.Invoke(ctx, "/srvbus_proto.SrvBus/GetMsgServer", in, out, opts...)
+func (c *srvBusClient) GetMessageServer(ctx context.Context, in *ServerRequest, opts ...grpc.CallOption) (*ServerResponse, error) {
+	out := new(ServerResponse)
+	err := c.cc.Invoke(ctx, "/srvbus_proto.SrvBus/GetMessageServer", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *srvBusClient) GetEventServer(ctx context.Context, in *ServerRequest, opts ...grpc.CallOption) (*ServerResponse, error) {
+	out := new(ServerResponse)
+	err := c.cc.Invoke(ctx, "/srvbus_proto.SrvBus/GetEventServer", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *srvBusClient) GetServiceServer(ctx context.Context, in *ServerRequest, opts ...grpc.CallOption) (*ServerResponse, error) {
+	out := new(ServerResponse)
+	err := c.cc.Invoke(ctx, "/srvbus_proto.SrvBus/GetServiceServer", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -46,11 +69,16 @@ func (c *srvBusClient) GetMsgServer(ctx context.Context, in *Server, opts ...grp
 // All implementations must embed UnimplementedSrvBusServer
 // for forward compatibility
 type SrvBusServer interface {
-	// checks if there is a MessageServer with given ID
-	// or askы for available MessageServer (if id in request
+	// checks if given server is present of service bus or
+	// asks for available MessageServer (if id in request
 	// is uuid.Nil 00000000-0000-0000-0000-000000000000
 	// or just nil).
-	GetMsgServer(context.Context, *Server) (*Server, error)
+	//
+	// if returned nil uuid, then there is no particular message server
+	// or there is no runned message server on the bus
+	GetMessageServer(context.Context, *ServerRequest) (*ServerResponse, error)
+	GetEventServer(context.Context, *ServerRequest) (*ServerResponse, error)
+	GetServiceServer(context.Context, *ServerRequest) (*ServerResponse, error)
 	mustEmbedUnimplementedSrvBusServer()
 }
 
@@ -58,8 +86,14 @@ type SrvBusServer interface {
 type UnimplementedSrvBusServer struct {
 }
 
-func (UnimplementedSrvBusServer) GetMsgServer(context.Context, *Server) (*Server, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetMsgServer not implemented")
+func (UnimplementedSrvBusServer) GetMessageServer(context.Context, *ServerRequest) (*ServerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMessageServer not implemented")
+}
+func (UnimplementedSrvBusServer) GetEventServer(context.Context, *ServerRequest) (*ServerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetEventServer not implemented")
+}
+func (UnimplementedSrvBusServer) GetServiceServer(context.Context, *ServerRequest) (*ServerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetServiceServer not implemented")
 }
 func (UnimplementedSrvBusServer) mustEmbedUnimplementedSrvBusServer() {}
 
@@ -74,20 +108,56 @@ func RegisterSrvBusServer(s grpc.ServiceRegistrar, srv SrvBusServer) {
 	s.RegisterService(&SrvBus_ServiceDesc, srv)
 }
 
-func _SrvBus_GetMsgServer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Server)
+func _SrvBus_GetMessageServer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ServerRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SrvBusServer).GetMsgServer(ctx, in)
+		return srv.(SrvBusServer).GetMessageServer(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/srvbus_proto.SrvBus/GetMsgServer",
+		FullMethod: "/srvbus_proto.SrvBus/GetMessageServer",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SrvBusServer).GetMsgServer(ctx, req.(*Server))
+		return srv.(SrvBusServer).GetMessageServer(ctx, req.(*ServerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SrvBus_GetEventServer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ServerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SrvBusServer).GetEventServer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/srvbus_proto.SrvBus/GetEventServer",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SrvBusServer).GetEventServer(ctx, req.(*ServerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SrvBus_GetServiceServer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ServerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SrvBusServer).GetServiceServer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/srvbus_proto.SrvBus/GetServiceServer",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SrvBusServer).GetServiceServer(ctx, req.(*ServerRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -100,8 +170,16 @@ var SrvBus_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*SrvBusServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "GetMsgServer",
-			Handler:    _SrvBus_GetMsgServer_Handler,
+			MethodName: "GetMessageServer",
+			Handler:    _SrvBus_GetMessageServer_Handler,
+		},
+		{
+			MethodName: "GetEventServer",
+			Handler:    _SrvBus_GetEventServer_Handler,
+		},
+		{
+			MethodName: "GetServiceServer",
+			Handler:    _SrvBus_GetServiceServer_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

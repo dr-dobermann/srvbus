@@ -114,8 +114,8 @@ func (q *mQueue) loop(ctx context.Context) {
 					q.Name, me.Name, me.Sender))
 
 			q.log.Debugw("message registered",
-				"msgID", me.Name,
-				"key", me.Name)
+				zap.String("msg_id", me.Name),
+				zap.String("key", me.Name))
 
 		}
 	}
@@ -147,7 +147,7 @@ func newQueue(
 	go q.loop(ctx)
 
 	q.log.Debugw("new message queue is created",
-		"queue", name)
+		zap.String("queue", name))
 
 	q.mSrv.EmitEvent(qNew,
 		fmt.Sprintf("{queue: \"%s\"}", q.Name))
@@ -177,8 +177,8 @@ func (q *mQueue) putMessages(
 
 			case q.regCh <- msgRegRequest{sender: sender, msg: m}:
 				q.log.Debugw("message registration request sent",
-					"msgID", m.ID,
-					"key", m.Name)
+					zap.Stringer("msg_id", m.ID),
+					zap.String("key", m.Name))
 			}
 		}
 	}()
@@ -200,8 +200,8 @@ func (q *mQueue) getMessages(
 	messages := make(chan MessageEnvelope)
 
 	q.log.Debugw("start reading messages",
-		"receiver", receiver,
-		"from begin", fromBegin)
+		zap.Stringer("receiver_id", receiver),
+		zap.Bool("from_begin", fromBegin))
 
 	q.Lock()
 
@@ -211,7 +211,7 @@ func (q *mQueue) getMessages(
 	}
 
 	q.log.Debugw("last message number",
-		zap.String("receiver", receiver.String()),
+		zap.Stringer("receiver_id", receiver),
 		zap.Int("from", from),
 		zap.Bool("fromBegin", fromBegin))
 
@@ -232,9 +232,9 @@ func (q *mQueue) getMessages(
 
 			case messages <- *me:
 				q.log.Debug(fmt.Sprintf("message %d/%d sent", i+1, c),
-					"receiver", receiver,
-					"msgID", me.ID,
-					"msd Key", me.Name)
+					zap.Stringer("receiver_id", receiver),
+					zap.Stringer("msg_id", me.ID),
+					zap.String("key", me.Name))
 			}
 		}
 
