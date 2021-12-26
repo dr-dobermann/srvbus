@@ -34,11 +34,22 @@ type EvtServer struct {
 
 	ctx context.Context
 
+	host string
+	port int
+
 	runned bool
 
 	// subsStreams is used to register and stops the subscription streams.
 	// the data as foolow [subscriber_id][subs_stream_id]contex_cancelfunction
 	subsStreams map[uuid.UUID]map[uuid.UUID]context.CancelFunc
+}
+
+func (eSrv *EvtServer) Host() string {
+	return eSrv.host
+}
+
+func (eSrv *EvtServer) Port() int {
+	return eSrv.port
 }
 
 // creates new event server
@@ -61,14 +72,15 @@ func New(eSrv *es.EventServer, log *zap.SugaredLogger) (*EvtServer, error) {
 // runs a gRPC server for Event Server
 func (eSrv *EvtServer) Run(
 	ctx context.Context,
-	host, port string,
+	host string,
+	port int,
 	opts ...grpc.ServerOption) error {
 
 	if eSrv.IsRunned() {
 		return errs.ErrAlreadyRunned
 	}
 
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%s", host, port))
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		return fmt.Errorf("couldn't start tcp listener: %v", err)
 	}
@@ -79,6 +91,8 @@ func (eSrv *EvtServer) Run(
 	eSrv.Lock()
 	eSrv.runned = true
 	eSrv.ctx = ctx
+	eSrv.host = host
+	eSrv.port = port
 	eSrv.Unlock()
 
 	// start delayed context cancel listener to stop
@@ -102,15 +116,17 @@ func (eSrv *EvtServer) Run(
 		grpcServer.Stop()
 	})
 
-	srvDescr := fmt.Sprintf("{name: \"%s\", id: \"%v\"}",
-		eSrv.srv.Name, eSrv.srv.ID)
+	srvDescr := fmt.Sprintf("{name: \"%s\", id: \"%v\","+
+		"type: \"grpc\", host: \"%s\", port: \"%d\"}",
+		eSrv.srv.Name, eSrv.srv.ID,
+		eSrv.host, eSrv.port)
 
 	eSrv.srv.EmitEvent(srvStart, srvDescr)
 
 	// run grpc server
 	eSrv.log.Infow("grpc server started",
 		zap.String("host", host),
-		zap.String("post", port))
+		zap.Int("post", port))
 
 	err = grpcServer.Serve(l)
 	if err != nil {
@@ -121,7 +137,7 @@ func (eSrv *EvtServer) Run(
 	eSrv.runned = false
 	eSrv.Unlock()
 
-	eSrv.srv.EmitEvent(srvEnd, srvDescr)
+	eSrv.srv.EmitEvent(srvEnd, "")
 
 	eSrv.log.Info("grpc server stopped")
 

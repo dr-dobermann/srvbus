@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dr-dobermann/srvbus/es"
 	"github.com/dr-dobermann/srvbus/internal/errs"
@@ -174,7 +175,7 @@ func New(
 	ms := &MessageServer{
 		id:   id,
 		Name: name,
-		log:  log.Named("MS: [" + name + "] #" + id.String()),
+		log:  log.Named("MS [" + name + "] #" + id.String()),
 		eSrv: eSrv}
 
 	log.Debug("message server created")
@@ -354,7 +355,7 @@ func (mSrv *MessageServer) WaitForQueue(
 
 				return
 
-			default:
+			case <-time.After(time.Second):
 				if mSrv.HasQueue(queue) {
 					wCh <- true
 

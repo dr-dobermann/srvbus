@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -64,7 +63,7 @@ func main() {
 	runCh := make(chan error)
 
 	go func() {
-		runCh <- gES.Run(ctx, *host, strconv.Itoa(*port))
+		runCh <- gES.Run(ctx, *host, *port)
 	}()
 
 	err = emitEvents(eSrv)

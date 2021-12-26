@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/dr-dobermann/srvbus"
+	"github.com/dr-dobermann/srvbus/api/grpc/msgrpc"
 	"github.com/dr-dobermann/srvbus/internal/errs"
 	pb "github.com/dr-dobermann/srvbus/proto/gen/sb_proto"
 	"go.uber.org/zap"
@@ -16,9 +17,21 @@ import (
 const (
 	sbStart = "SB_GRPC_START_EVT"
 	sbEnd   = "SB_GRPC_END_EVT"
+
+	posEventServer   = 0
+	posMessageServer = 1
+	posServiceServer = 2
 )
 
-var UseHostLogger *zap.SugaredLogger
+var (
+	UseHostLogger *zap.SugaredLogger
+
+	srvDefaultPorts map[int]int = map[int]int{
+		posEventServer:   50071, // event server
+		posMessageServer: 50072, // message server
+		posServiceServer: 50073, // service server
+	}
+)
 
 // EvtServer is a gRPC cover for the es.EventServer.
 type SrvBus struct {
@@ -30,6 +43,14 @@ type SrvBus struct {
 	log  *zap.SugaredLogger
 
 	ctx context.Context
+
+	host string
+	port int
+
+	srvPorts [3]int
+
+	mSrv *msgrpc.MsgServer
+	//eSrv *esgrpc.EvtServer
 
 	runned bool
 }
@@ -46,14 +67,23 @@ func New(sb *srvbus.ServiceBus, log *zap.SugaredLogger) (*SrvBus, error) {
 
 	return &SrvBus{
 			sBus: sb,
-			log:  log},
+			log:  log.Named("GRPC")},
 		nil
 }
 
-// runs a gRPC server for Event Server
+// runs a gRPC server for ServiceBus.
+//
+// srvPort - is a port numbers for serviceBus gRPC servers
+// 		0 -- event server
+// 		1 -- message server
+// 		2 -- service server
+// if any port is 0, then default ports will be used
+// [50071, 50072, 50073] accordingly.
 func (sb *SrvBus) Run(
 	ctx context.Context,
-	host, port string,
+	host string,
+	port int,
+	srvPorts [3]int,
 	opts ...grpc.ServerOption) error {
 
 	if sb.IsRunned() {
@@ -66,7 +96,7 @@ func (sb *SrvBus) Run(
 		}
 	}
 
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%s", host, port))
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		return fmt.Errorf("couldn't start tcp listener: %v", err)
 	}
@@ -77,6 +107,15 @@ func (sb *SrvBus) Run(
 	sb.Lock()
 	sb.runned = true
 	sb.ctx = ctx
+	sb.host = host
+	sb.port = port
+
+	for i, p := range srvPorts {
+		if p <= 0 {
+			p = srvDefaultPorts[i]
+		}
+		sb.srvPorts[i] = p
+	}
 	sb.Unlock()
 
 	// start context cancel listener to stop
@@ -98,11 +137,11 @@ func (sb *SrvBus) Run(
 	// run grpc server
 	sb.log.Infow("grpc server started",
 		zap.String("host", host),
-		zap.String("post", port))
+		zap.Int("post", port))
 
 	err = grpcServer.Serve(l)
 	if err != nil {
-		sb.log.Warn("grpc server ended with error: ", err)
+		sb.log.Info("grpc server ended with error: ", err)
 	}
 
 	sb.Lock()
@@ -124,6 +163,49 @@ func (sb *SrvBus) IsRunned() bool {
 	return sb.runned
 }
 
-// GetMessageServer(ctx context.Context, in *ServerRequest, opts ...grpc.CallOption) (*ServerResponse, error)
-// GetEventServer(ctx context.Context, in *ServerRequest, opts ...grpc.CallOption) (*ServerResponse, error)
-// GetServiceServer(ctx context.Context, in *ServerRequest, opts ...grpc.CallOption) (*ServerResponse, error)
+// returns a MessageServer gRPC handler.
+//
+// if there is no runned handler, it will be created
+// and runned.
+func (sb *SrvBus) getMsGrpc() (*msgrpc.MsgServer, error) {
+	if !sb.IsRunned() {
+		return nil, errs.ErrNotRunned
+	}
+
+	// if MessageServer's gRPC handler isn't existed yet,
+	// then create a new one
+	if sb.mSrv == nil {
+		var err error
+
+		// take an internal MessageServer from the
+		// ServiceBus
+		mSrv, err := sb.sBus.GetMessageServer()
+		if err != nil {
+			return nil,
+				fmt.Errorf(
+					"couldn't get an MessageServer from ServiceBus: %v", err)
+		}
+
+		// and create gRPC hanler for it
+		sb.mSrv, err = msgrpc.New(mSrv, nil)
+		if err != nil {
+			return nil,
+				fmt.Errorf(
+					"couldn't create an MessageServer gRPC hadler: %v", err)
+		}
+	}
+
+	// run MS gRPC handler if it's not running yet
+	if !sb.mSrv.IsRunned() {
+		go func() {
+			err := sb.mSrv.Run(sb.ctx, sb.host, sb.srvPorts[posMessageServer])
+			if err != nil {
+				sb.log.Debug(
+					"MessageServer gRPC handler ends with error",
+					zap.Error(err))
+			}
+		}()
+	}
+
+	return sb.mSrv, nil
+}

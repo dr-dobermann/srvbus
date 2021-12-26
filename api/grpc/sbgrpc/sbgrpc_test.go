@@ -3,7 +3,6 @@ package sbgrpc
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -27,37 +26,44 @@ func TestGRPCStart(t *testing.T) {
 	is.True(sb != nil)
 
 	// create grpc shell for service bus
-	sbGrpc, err := New(sb, log.Sugar())
+	sbGrpc, err := New(sb, nil)
 	is.NoErr(err)
 	is.True(sbGrpc != nil)
 	is.True(!sb.IsRunned())
 
 	// start grpc server
-	ctx, cancel := context.WithDeadline(
-		context.Background(),
-		time.Now().Add(5*time.Second))
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
 	go func() {
-		err := sbGrpc.Run(ctx, "localhost", "50051")
-		fmt.Println("grpc service exit error:", err)
-		wg.Done()
+		err := sbGrpc.Run(ctx, "localhost", 50051, [3]int{0, 0, 0})
+		if err != nil {
+			fmt.Println("service bus grpc handler exit error:", err)
+		}
 	}()
 
-	deadline := time.NewTimer(2 * time.Second)
-	for !sbGrpc.IsRunned() {
+	retries := 2
+	for retries > 0 && !sbGrpc.IsRunned() {
 		select {
-		case <-deadline.C:
-			fmt.Println("timeout exceeded!")
-			break
+		case <-ctx.Done():
+			fmt.Println("context cancelled")
+			retries = 0
 
-		default:
+		case <-time.After(time.Second):
+			retries--
+			fmt.Println("tick...")
 		}
 	}
 
 	is.True(sbGrpc.IsRunned())
 
-	wg.Wait()
+	mSrv, err := sbGrpc.getMsGrpc()
+	is.NoErr(err)
+	is.True(mSrv != nil)
+
+	time.Sleep(10 * time.Second)
+
+	if !mSrv.IsRunned() {
+		t.Fatal("MessageServer gRPC hadler is stopped")
+	}
 }

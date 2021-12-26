@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/dr-dobermann/srvbus/internal/errs"
 	"github.com/dr-dobermann/srvbus/ms"
@@ -30,7 +29,26 @@ type MsgServer struct {
 	log *zap.SugaredLogger
 	srv *ms.MessageServer
 
+	host string
+	port int
+
 	runned bool
+}
+
+func (mSrv *MsgServer) Host() string {
+	return mSrv.host
+}
+
+func (mSrv *MsgServer) Port() int {
+	return mSrv.port
+}
+
+func (mSrv *MsgServer) ID() uuid.UUID {
+	if mSrv.srv == nil {
+		return uuid.Nil
+	}
+
+	return mSrv.srv.ID()
 }
 
 // creates a new GRPC server for the single Message Server.
@@ -323,7 +341,8 @@ func (mSrv *MsgServer) checkServerID(id string) (uuid.UUID, error) {
 // Runs creates grpc host and runs it.
 func (mSrv *MsgServer) Run(
 	ctx context.Context,
-	host, port string,
+	host string,
+	port int,
 	opts ...grpc.ServerOption) error {
 
 	if mSrv.IsRunned() {
@@ -331,7 +350,7 @@ func (mSrv *MsgServer) Run(
 	}
 
 	// open listener
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%s", host, port))
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		return fmt.Errorf("couldn't start listener: %v", err)
 	}
@@ -342,24 +361,29 @@ func (mSrv *MsgServer) Run(
 
 	mSrv.Lock()
 	mSrv.runned = true
+	mSrv.host = host
+	mSrv.port = port
 	mSrv.Unlock()
 
-	mSrv.srv.EmitEvent(srvStart,
-		fmt.Sprintf(
-			"{type: \"grpc\", host: \"%s\", port: %s}",
-			host, port))
+	srvDescr := fmt.Sprintf(
+		"{name: \"%s\", id: \"%v\","+
+			"type: \"grpc\", host: \"%s\", port: %v}",
+		mSrv.srv.Name, mSrv.srv.ID(), host, port)
+
+	mSrv.srv.EmitEvent(srvStart, srvDescr)
 
 	mSrv.log.Infow("grpc server started",
 		zap.String("host", host),
-		zap.String("post", port))
+		zap.Int("post", port))
 
 	// start delayed context cancel listener to stop
 	// grpc server once context cancelled
-	time.AfterFunc(time.Second, func() {
-		mSrv.log.Debug("server context stopper started...")
+	go func() {
+		mSrv.log.Debug("mserver grpc context stopper started...")
 		<-ctx.Done()
 		grpcServer.Stop()
-	})
+		mSrv.log.Debug("mserver grpc context cancelled")
+	}()
 
 	// run grpc server
 	err = grpcServer.Serve(l)

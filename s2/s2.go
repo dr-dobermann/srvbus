@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dr-dobermann/srvbus/es"
 	"github.com/dr-dobermann/srvbus/internal/errs"
@@ -566,7 +567,7 @@ func (sSrv *ServiceServer) waitForSvc(
 			return
 
 		// do not block if there is nothing to send or receive
-		default:
+		case <-time.After(time.Second):
 		}
 	}
 }

@@ -294,10 +294,6 @@ func (t *Topic) processTopic(ctx context.Context) {
 
 			go t.updateSubs(ctx, &ee, pos)
 
-		default:
-			if !t.isRunned() {
-				return
-			}
 		}
 	}
 }

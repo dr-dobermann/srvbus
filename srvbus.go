@@ -18,6 +18,10 @@ const (
 	sbusEnd   = "SBUS_END_EVT"
 
 	defaultTopic = "/sbus"
+
+	msName = "SB_MS"
+	esName = "SB_ES"
+	s2Name = "SB_S2"
 )
 
 type SBusErr struct {
@@ -110,17 +114,17 @@ func New(id uuid.UUID, log *zap.SugaredLogger) (*ServiceBus, error) {
 
 	var err error
 
-	sb.eSrv, err = es.New(uuid.New(), "SB_ES", log)
+	sb.eSrv, err = es.New(uuid.New(), esName, log)
 	if err != nil {
 		return nil, SBusErr{id, "couldn't create an Event Server", err}
 	}
 
-	sb.mSrv, err = ms.New(uuid.New(), "SB_MS", log, sb.eSrv)
+	sb.mSrv, err = ms.New(uuid.New(), msName, log, sb.eSrv)
 	if err != nil {
 		return nil, SBusErr{id, "couldn't create a Message Server", err}
 	}
 
-	sb.sSrv, err = s2.New(uuid.New(), "SB_S2", log, sb.eSrv)
+	sb.sSrv, err = s2.New(uuid.New(), s2Name, log, sb.eSrv)
 	if err != nil {
 		return nil, SBusErr{id, "couldn't create a Service Server", err}
 	}

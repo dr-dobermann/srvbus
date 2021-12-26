@@ -108,7 +108,7 @@ func main() {
 		log.Sugar().Fatal("couldn't create a gRPC server:", err)
 	}
 
-	err = msGRPC.Run(ctx, "localhost", "50051")
+	err = msGRPC.Run(ctx, "localhost", 50051)
 	if err != nil {
 		log.Sugar().Fatal("error running gRPC server:", err)
 	}
