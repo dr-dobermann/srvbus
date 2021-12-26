@@ -57,13 +57,23 @@ func TestGRPCStart(t *testing.T) {
 
 	is.True(sbGrpc.IsRunned())
 
+	// get MS gRPC handler
 	mSrv, err := sbGrpc.getMsGrpc()
 	is.NoErr(err)
 	is.True(mSrv != nil)
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	if !mSrv.IsRunned() {
 		t.Fatal("MessageServer gRPC hadler is stopped")
 	}
+
+	// get ES gRPC handler
+	eSrv, err := sbGrpc.getEsGrpc()
+	is.NoErr(err)
+	is.True(eSrv != nil)
+
+	time.Sleep(2 * time.Second)
+
+	is.True(!eSrv.IsRunned())
 }

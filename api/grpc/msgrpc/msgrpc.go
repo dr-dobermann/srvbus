@@ -376,7 +376,7 @@ func (mSrv *MsgServer) Run(
 		zap.String("host", host),
 		zap.Int("post", port))
 
-	// start delayed context cancel listener to stop
+	// start context cancel listener to stop
 	// grpc server once context cancelled
 	go func() {
 		mSrv.log.Debug("mserver grpc context stopper started...")

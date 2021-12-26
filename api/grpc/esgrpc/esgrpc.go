@@ -52,6 +52,14 @@ func (eSrv *EvtServer) Port() int {
 	return eSrv.port
 }
 
+func (eSrv *EvtServer) ID() uuid.UUID {
+	if eSrv.srv == nil {
+		return uuid.Nil
+	}
+
+	return eSrv.ID()
+}
+
 // creates new event server
 func New(eSrv *es.EventServer, log *zap.SugaredLogger) (*EvtServer, error) {
 	if eSrv == nil {

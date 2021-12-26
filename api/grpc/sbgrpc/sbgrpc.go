@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/dr-dobermann/srvbus"
+	"github.com/dr-dobermann/srvbus/api/grpc/esgrpc"
 	"github.com/dr-dobermann/srvbus/api/grpc/msgrpc"
 	"github.com/dr-dobermann/srvbus/internal/errs"
 	pb "github.com/dr-dobermann/srvbus/proto/gen/sb_proto"
@@ -50,7 +51,7 @@ type SrvBus struct {
 	srvPorts [3]int
 
 	mSrv *msgrpc.MsgServer
-	//eSrv *esgrpc.EvtServer
+	eSrv *esgrpc.EvtServer
 
 	runned bool
 }
@@ -187,11 +188,11 @@ func (sb *SrvBus) getMsGrpc() (*msgrpc.MsgServer, error) {
 		}
 
 		// and create gRPC hanler for it
-		sb.mSrv, err = msgrpc.New(mSrv, nil)
+		sb.mSrv, err = msgrpc.New(mSrv, UseHostLogger)
 		if err != nil {
 			return nil,
 				fmt.Errorf(
-					"couldn't create an MessageServer gRPC hadler: %v", err)
+					"couldn't create the MessageServer gRPC hadler: %v", err)
 		}
 	}
 
@@ -208,4 +209,44 @@ func (sb *SrvBus) getMsGrpc() (*msgrpc.MsgServer, error) {
 	}
 
 	return sb.mSrv, nil
+}
+
+func (sb *SrvBus) getEsGrpc() (*esgrpc.EvtServer, error) {
+	if !sb.IsRunned() {
+		return nil, errs.ErrNotRunned
+	}
+
+	// if EventServer's grpc handler is nil,
+	// create it
+	if sb.eSrv == nil {
+		var err error
+
+		eSrv, err := sb.sBus.GetEventServer()
+		if err != nil {
+			return nil,
+				fmt.Errorf(
+					"couldn't get and EventServer from ServiceBus: %v", err)
+		}
+
+		sb.eSrv, err = esgrpc.New(eSrv, UseHostLogger)
+		if err != nil {
+			return nil,
+				fmt.Errorf(
+					"couldn't create the EventServer's gRPC handler: %v",
+					err)
+		}
+	}
+
+	// run EventServer's gRPC handler
+	if !sb.eSrv.IsRunned() {
+		go func() {
+			err := sb.eSrv.Run(sb.ctx, sb.host, sb.srvPorts[posEventServer])
+			if err != nil {
+				sb.log.Debugw("EventServer's gRPC handler ended with error",
+					zap.Error(err))
+			}
+		}()
+	}
+
+	return sb.eSrv, nil
 }
