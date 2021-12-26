@@ -86,7 +86,7 @@ func (sb *SrvBus) Run(
 
 		<-ctx.Done()
 
-		sb.log.Debug("context cancelled")
+		sb.log.Debug("context cancelled. Stopping the gRPC server...")
 
 		grpcServer.Stop()
 	}()

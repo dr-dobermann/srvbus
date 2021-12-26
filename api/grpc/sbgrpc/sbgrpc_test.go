@@ -41,10 +41,21 @@ func TestGRPCStart(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		err := sbGrpc.Run(ctx, "localhost", "500051")
+		err := sbGrpc.Run(ctx, "localhost", "50051")
 		fmt.Println("grpc service exit error:", err)
 		wg.Done()
 	}()
+
+	deadline := time.NewTimer(2 * time.Second)
+	for !sbGrpc.IsRunned() {
+		select {
+		case <-deadline.C:
+			fmt.Println("timeout exceeded!")
+			break
+
+		default:
+		}
+	}
 
 	is.True(sbGrpc.IsRunned())
 
