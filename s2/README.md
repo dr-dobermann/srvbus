@@ -1,4 +1,4 @@
-**s2** is a in-memory Service Server implementation for servbus package.
+**s2** is a in-memory Service Server implementation for srvbus package.
 
 ## Introduction
 
