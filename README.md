@@ -16,18 +16,18 @@ Now I have simple, functional and robust services with minimal dependencies and 
 
 Service Bus combines three services, provided by [EventServer](https://github.com/dr-dobermann/srvbus/tree/master/es), [MessageServer](https://github.com/dr-dobermann/srvbus/tree/master/ms) and [ServiceServer](https://github.com/dr-dobermann/srvbus/tree/master/s2).
 
-On ServiceBus creation all three servers creates and ready for running.
+On ServiceBus creation all three servers are created and ready for running.
 
 ## Start and stop the ServiceBus
 
 To run the ServiceBus, `Run` function of the `srvbus` package should be called.
 
-To stop the service bus, cancel function of the context used in `Run` invocation should be used.
+To stop the service bus, cancel function of the context used in `Run` invokation should be used.
 There is no another way to stop the service bus and underlaying servers.
 
 ## Accesing to Servers
 
-Service Bus does not provide services of underlayed servers by itself. It just give an acces to them throug its methods `GetEventServer`, `GetMessageServer` and `GetServiceServer`. After getting the pointer to a desired server, the user could call the server methods.
+Service Bus does not provide services of underlayed servers by itself. It just give an acces to the servers by methods `GetEventServer`, `GetMessageServer` and `GetServiceServer`. After getting the pointer to a desired server, the user could call the server's methods.
 
 ## gRPC interface
 
