@@ -2,7 +2,7 @@
 
 ## Introduction
 
-s2 allows to register, run and monitor services. s2 designed to be a part of srvbus package -- a Service Provider in the GoBpm project. s2 could be used separately in case you don't need the whole srvbus functionality.
+s2 allows to register, run and monitor services. s2 designed to be a part of `srvbus` package -- a Service Provider in the GoBpm project. s2 could be used separately in case you don't need the whole srvbus functionality.
 
 For logging s2 uses [uber's zap](https://github.com/uber-go/zap) sugared logger. It's only one external dependency of s2.
 

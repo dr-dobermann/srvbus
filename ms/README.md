@@ -2,11 +2,13 @@
 
 # Introduction
 
-**ms** is a part of `srvbus` package - the Service Provider of the complex project [gobpm](https://github.com/dr-dobermann/gobpm) -- the BPMN v2. compliant run-time engine on Go. 
+**ms** is a part of `srvbus` package - the Service Provider for the complex project [gobpm](https://github.com/dr-dobermann/gobpm) -- the BPMN v2. compliant run-time engine on Go. 
 
 **Message Server** (ms) is designed to use in a cooperation with the **Event Server** (es) and the **Service Server** (s2), but it could be used separately in case there is only a necessity of the queued messages interchange.
 
 For logging Message Server uses [Uber zap logger](https://github.com/uber-go/zap).
+
+# MessageServer
 
 ## Running the Message Server
 
@@ -22,7 +24,12 @@ In case the Server is stopped early, all the queues created in the previous sess
 
 After the server is created its possible to Put messages into it and Get messages out of it.
 
-### gRPC API of the Message Server
+## Stopping the server
+
+To stop the Message Server user should invoke `cancel` function of the context. Server stops processing of all the registered queues.
+
+
+## gRPC API of the Message Server
 
 To run the gRPC API of the Message Server, `MsgServer`  object from `pkg/api/ms/grpc` should be created and runs by its `Run` method.
 
@@ -38,6 +45,8 @@ The gRPC provides three functions:
 
   - `HasQueue( QueueCheck ) returns ( QueueCheckResponse )`
 
+# Working with messages
+
 ## Putting messages to the server
 
 To put messages `PutMessages` method of MessageServer should be invoked. Current realization doesn't provide direct queues management. When messages are putting into the server, the name of queue should be given. If there is no queue with the given name, then the new queue will be created. If event server is given while message server creation, then `NEW_QUEUE_EVT` will fired.
@@ -46,7 +55,7 @@ When messages are putting into the queue, the sender id of these messages should
 
 `PutMessages` consumes variadic number of messages and all of them are storing into the same queue in the FIFO order.
 
-if event server is present then after message registration in the queue new `NEW_MSG_EVT` will fired.
+if event server is presented then after message registration in the queue new `NEW_MSG_EVT` will fired.
 
 ## Getting messages from the server
 
@@ -80,6 +89,7 @@ In case the queue was appeard until timeout ends the true will send over the ret
 
     // do actual things (i.e. GetMessages)
 
+To prevent of inneffective CPU usage checking for the queue is made once in a second. To get information about queue is created just subscribe for `NEW_QUEUE_EVT` in topic `/mserver/xxxxxxxx-xxxx-xxx-xxxxxxxxxxxx`, where the latter is the MessageServer ID. Set as a filter the name of desired queue and just listen to the result channel.
 
 ## Getting a list of the queues existed on the server
 
@@ -87,13 +97,9 @@ To get a list of queues existed on the server the method `Queues` should be invo
 
 In the present moment I don't see any neccessity to provide a queue's restarting tools, but it could be easily added if someone provides a good reason for it.
 
-## Stopping the server
+## Messages
 
-To stop the Message Server user should invoke `cancel` function of the context. Server stops processing of all the registered queues.
-
-## Message
-
-Messages only has three fields
+Message only has three fields:
   
     Message struct {
       id  uuid.UUID
@@ -117,13 +123,13 @@ There are two functions for creating Message object:
         key string,
         r io.Reader) *Message
 
-The only difference betweet theese two is that the latter one returns only the Message pointer and if there is any error, it panics.
+The only difference betweet these two is that the latter one returns only the Message pointer and if there is any error, it panics.
 
 If the message Id isn't presented (user send `uuid.Nil` as a parameter) the new one will be generated.
 
-The data field of the message stores from the given `io.Reader r`.
-To access stored data Message provides two ways:
+The data field of the message is stored from the given `io.Reader r`.
+To access to a stored data Message provides two ways:
 
-  1. Use `Data` method which returns []byte.
+  1. Using `Data` method which returns []byte.
 
-  2. Use `io.Reader` interface implemented for the Message.
+  2. Using `io.Reader` interface implemented for the Message.
