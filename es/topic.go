@@ -308,7 +308,8 @@ func (t *Topic) updateSubs(ctx context.Context, ee *EventEnvelope, pos int) {
 		ss := sl
 
 		go func() {
-			// go through one subscriber subsciptions
+			// go through one subscriber subsciptions and
+			// send (if possible by filters) a message
 			for _, s := range ss {
 				s := s
 				go s.sendEvent(ctx, ee, pos)
@@ -345,6 +346,8 @@ func (t *Topic) subscribe(subscriber uuid.UUID, sr SubscrReq) error {
 		zap.Bool("recursive", sr.Recursive),
 		zap.Uint("rec_depth", sr.Depth))
 
+	// send all previously stored events to a new
+	// subscriber
 	go t.startSub(ns, sr.StartPos)
 
 	// if the subscription is recursive, add subscription to subtopics

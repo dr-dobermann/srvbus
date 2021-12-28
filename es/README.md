@@ -34,7 +34,7 @@ Event Server could be ended only by context's cancel function given by `Run` cal
 
 ## gRPC interface of the EventServer
 
-EventServer has a gRPC interface. It could be accessed from `api/grpc/esgrpc` package. Package provides simple gRPC hadler which created by `New` call. Just send to it pointer of the EventServer and optional zap.SugaredLogger (if the logger is nil, the hosted MessageServer logger will be used.).
+EventServer has a separate gRPC interface. It could be accessed from `api/grpc/esgrpc` package. Package provides simple gRPC hadler which created by `New` call. Just send to it pointer of the EventServer and optional zap.SugaredLogger (if the logger is nil, the hosted MessageServer logger will be used.).
 
 After creating the EventServer's gRPC handler, just run it with its `Run` method using appropriate context.
 
