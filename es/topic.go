@@ -310,6 +310,9 @@ func (t *Topic) updateSubs(ctx context.Context, ee *EventEnvelope, pos int) {
 		go func() {
 			// go through one subscriber subsciptions and
 			// send (if possible by filters) a message
+			t.Lock()
+			defer t.Unlock()
+
 			for _, s := range ss {
 				s := s
 				go s.sendEvent(ctx, ee, pos)
@@ -324,6 +327,7 @@ func (t *Topic) subscribe(subscriber uuid.UUID, sr SubscrReq) error {
 		return newESErr(t.eServer, nil, "cannot subscribe on stopped topic")
 	}
 
+	t.Lock()
 	s, ok := t.subs[subscriber]
 	if !ok {
 		s = []*subscription{}
@@ -339,6 +343,7 @@ func (t *Topic) subscribe(subscriber uuid.UUID, sr SubscrReq) error {
 	s = append(s, ns)
 
 	t.subs[subscriber] = s
+	t.Unlock()
 
 	t.log.Debugw("subscription added",
 		zap.Stringer("subscriber", subscriber),

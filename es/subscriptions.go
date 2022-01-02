@@ -107,6 +107,9 @@ func (s *subscription) sendEvent(ctx context.Context,
 		return
 	}
 
+	s.Lock()
+	defer s.Unlock()
+
 	// sequental sending of events
 	for {
 		// check context cancelling
@@ -116,7 +119,6 @@ func (s *subscription) sendEvent(ctx context.Context,
 		default:
 		}
 
-		s.Lock()
 		// if sender wants to get first event in the t.events
 		//
 		// or
@@ -130,12 +132,10 @@ func (s *subscription) sendEvent(ctx context.Context,
 			// set lastRead according to event position in
 			// the t.events
 			s.lastReaded = pos
-			s.Unlock()
 
 			return
 		}
 
-		s.Unlock()
 	}
 }
 
@@ -154,10 +154,10 @@ func (s *subscription) filter(ee *EventEnvelope) *EventEnvelope {
 	for _, f := range s.filters {
 		f := f
 		go func() {
+			defer wg.Done()
+
 			s.Lock()
 			defer s.Unlock()
-
-			defer wg.Done()
 
 			if *filterFail {
 				return
