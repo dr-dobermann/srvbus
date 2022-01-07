@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	qNew   = "NEW_QUEUE_EVT"
-	msgNew = "NEW_MSG_EVT"
+	NewQueueEvt = "NEW_QUEUE_EVT"
+	NewMsgEvt   = "NEW_MSG_EVT"
 )
 
 // MessageEnvelope holds the Message itself and the time when it was added
@@ -108,13 +108,13 @@ func (q *mQueue) loop(ctx context.Context) {
 			q.messages = append(q.messages, me)
 			q.Unlock()
 
-			q.mSrv.EmitEvent(msgNew,
+			q.mSrv.EmitEvent(NewMsgEvt,
 				fmt.Sprintf(
 					"{queue: \"%s\", msg_name: \"%s\", msg_sender: \"%v\"}",
 					q.Name, me.Name, me.Sender))
 
 			q.log.Debugw("message registered",
-				zap.String("msg_id", me.Name),
+				zap.Stringer("msg_id", me.ID),
 				zap.String("key", me.Name))
 
 		}
@@ -149,7 +149,7 @@ func newQueue(
 	q.log.Debugw("new message queue is created",
 		zap.String("queue", name))
 
-	q.mSrv.EmitEvent(qNew,
+	q.mSrv.EmitEvent(NewQueueEvt,
 		fmt.Sprintf("{queue: \"%s\"}", q.Name))
 
 	return &q
