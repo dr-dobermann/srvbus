@@ -37,6 +37,7 @@ const (
 	srvEnd   = "SSERVER_END_EVT"
 
 	svcStart = "SERVICE_START_EVT"
+	svcFailed = "SERVICE_FAILED"
 	svcEnd   = "SERVICE_END_EVT"
 
 	defaultTopic = "/s2"
@@ -247,6 +248,11 @@ func (sSrv *ServiceServer) loop(ctx context.Context) {
 				if err != nil {
 					sr.setState(SSFailed, err)
 
+					sSrv.emitEvent(svcFailed,
+						fmt.Sprintf(
+							"{name: \"%s\", id: \"%v\", state: \"%d:%s\"}",
+							sr.name, sr.id, sr.state, sr.state.String()))
+					
 					sSrv.log.Infow("service failed",
 						zap.Stringer("svc_id", id),
 						zap.Error(err))
